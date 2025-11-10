@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+@theme {
+  /* Elegant Matte Theme */
+  --color-background: 220 15% 8%; /* Dark matte gray */
+  --color-foreground: 210 40% 98%;
+  --color-card: 220 15% 12%;
+  --color-card-foreground: 210 40% 98%;
+  --color-popover: 220 15% 12%;
+  --color-popover-foreground: 210 40% 98%;
+  --color-primary: 45 90% 60%; /* Soft golden accent */
+  --color-primary-foreground: 222.2 47.4% 11.2%;
+  --color-secondary: 220 10% 20%;
+  --color-secondary-foreground: 210 40% 98%;
+  --color-muted: 220 8% 18%;
+  --color-muted-foreground: 215 20.2% 65.1%;
+  --color-accent: 45 80% 55%;
+  --color-accent-foreground: 222.2 47.4% 11.2%;
+  --color-destructive: 0 72% 42%;
+  --color-destructive-foreground: 210 40% 98%;
+  --color-border: 220 10% 22%;
+  --color-input: 220 10% 20%;
+  --color-ring: 45 85% 60%;
+
+  --radius-lg: 0.75rem;
+  --radius-md: 0.5rem;
+  --radius-sm: 0.25rem;
+}
+
+body {
+  background-color: hsl(var(--color-background));
+  color: hsl(var(--color-foreground));
+  font-family: 'Inter', system-ui, sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Add subtle light gradient and depth */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(
+      circle at top left,
+      hsl(45 80% 60% / 0.08),
+      transparent 70%
+    ),
+    radial-gradient(
+      circle at bottom right,
+      hsl(220 60% 40% / 0.08),
+      transparent 70%
+    );
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-track {
+  background: hsl(var(--color-background));
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--color-muted));
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--color-primary));
+}

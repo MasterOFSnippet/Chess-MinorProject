@@ -1,0 +1,146 @@
+.chess-board-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px;
+}
+
+.chess-board {
+  display: inline-block;
+  border: 4px solid hsl(var(--color-primary));
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), 0 0 20px rgba(251, 191, 36, 0.2);
+  background: hsl(var(--color-card));
+  position: relative;
+}
+
+.chess-board::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 12px;
+  padding: 4px;
+  background: linear-gradient(135deg, hsl(var(--color-primary)), #fbbf24);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.6;
+}
+
+.board-row {
+  display: flex;
+}
+
+.square {
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.square:hover:not(.disabled) {
+  filter: brightness(1.15);
+  transform: scale(1.02);
+}
+
+.square.light {
+  background-color: #f0d9b5;
+}
+
+.square.dark {
+  background-color: #b58863;
+}
+
+.square.selected {
+  background-color: #baca44 !important;
+  box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.4);
+  border: 2px solid hsl(var(--color-primary));
+}
+
+.square.disabled {
+  cursor: not-allowed;
+  opacity: 0.85;
+}
+
+.piece {
+  font-size: 56px;
+  cursor: pointer;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.4);
+  transition: transform 0.15s ease;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.3));
+}
+
+.square:hover .piece:not(.disabled) {
+  transform: scale(1.15);
+}
+
+.white-piece {
+  color: #ffffff;
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.6));
+}
+
+.black-piece {
+  color: #1a1a1a;
+  filter: drop-shadow(0 3px 5px rgba(255, 255, 255, 0.3));
+}
+
+/* Coordinate labels */
+.rank-label,
+.file-label {
+  position: absolute;
+  font-size: 12px;
+  font-weight: bold;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.rank-label {
+  top: 4px;
+  left: 6px;
+}
+
+.square.light .rank-label,
+.square.light .file-label {
+  color: #b58863;
+}
+
+.square.dark .rank-label,
+.square.dark .file-label {
+  color: #f0d9b5;
+}
+
+.file-label {
+  bottom: 4px;
+  right: 6px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .square {
+    width: 50px;
+    height: 50px;
+  }
+  
+  .piece {
+    font-size: 36px;
+  }
+}
+
+/* Glow animation for selected square */
+@keyframes glow {
+  0%, 100% {
+    box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.4);
+  }
+  50% {
+    box-shadow: inset 0 0 20px rgba(251, 191, 36, 0.6);
+  }
+}
+
+.square.selected {
+  animation: glow 2s ease-in-out infinite;
+}
