@@ -45,6 +45,12 @@
 
 ---
 
+## “Play smart. Think ahead. And always protect your queen.” ♛
+
+                                                    -Arav Gautam
+
+---
+
 ## 🛠️ Installation & Setup (Local Development)
 
 ### 1️⃣ Clone the Repository
@@ -52,5 +58,3 @@
 git clone https://github.com/MasterOFSnippet/Chess-MinorProject.git
 cd Chess-MinorProject
 
-
-## “Play smart. Think ahead. And always protect your queen.” ♛
