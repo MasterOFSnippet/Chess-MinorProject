@@ -65,6 +65,11 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
+    // Disconnect socket
+    import('../services/socketService').then(module => {
+      module.default.disconnect();
+    });
+    
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setUser(null);

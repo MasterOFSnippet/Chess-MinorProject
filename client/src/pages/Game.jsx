@@ -1,13 +1,20 @@
+/**
+ * Game Page - Real-time Chess Game with Chat
+ * Integrates Socket.IO for real-time updates and chat
+ */
+
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Chess } from 'chess.js';
 import { gameAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import socketService from '../services/socketService';
 import ChessBoard from '../components/ChessBoard/ChessBoard';
+import ChatPanel from '../components/game/ChatPanel';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { Trophy, Clock, Target, Flag, Bot, User } from 'lucide-react';
+import { Trophy, Clock, Target, Flag, Bot, User, Wifi, WifiOff } from 'lucide-react';
 
 const Game = () => {
   const { gameId } = useParams();
@@ -18,15 +25,99 @@ const Game = () => {
   const [chess] = useState(new Chess());
   const [position, setPosition] = useState('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
   const [loading, setLoading] = useState(true);
+  const [socketConnected, setSocketConnected] = useState(false);
+  const [opponentOnline, setOpponentOnline] = useState(false);
 
+  // ============================================
+  // INITIALIZE SOCKET CONNECTION
+  // ============================================
   useEffect(() => {
-    if (gameId) {
-      fetchGame();
-      const interval = setInterval(fetchGame, 3000);
-      return () => clearInterval(interval);
+    const token = localStorage.getItem('token');
+    if (!token) {
+      navigate('/login');
+      return;
     }
-  }, [gameId]);
 
+    // Connect socket if not already connected
+    if (!socketService.isConnected()) {
+      socketService.connect(token);
+    }
+
+    // Check connection status
+    const socket = socketService.getSocket();
+    if (socket) {
+      setSocketConnected(socket.connected);
+
+      socket.on('connect', () => setSocketConnected(true));
+      socket.on('disconnect', () => setSocketConnected(false));
+    }
+
+    return () => {
+      // Don't disconnect socket on unmount - keep it alive for chat
+      // socket.disconnect() would break chat if user navigates away
+    };
+  }, [navigate]);
+
+  // ============================================
+  // LOAD GAME & JOIN ROOM
+  // ============================================
+  useEffect(() => {
+    if (gameId && socketConnected) {
+      fetchGame();
+      socketService.joinGame(gameId);
+
+      // Setup socket listeners
+      setupSocketListeners();
+
+      return () => {
+        socketService.leaveGame(gameId);
+      };
+    }
+  }, [gameId, socketConnected]);
+
+  // ============================================
+  // SETUP SOCKET LISTENERS
+  // ============================================
+  const setupSocketListeners = () => {
+    // Listen for opponent moves
+    socketService.onMoveMade(({ playerId, username, move }) => {
+      if (playerId !== user.id) {
+        console.log(`♟️ ${username} made a move:`, move);
+        // Refresh game state from server
+        fetchGame();
+      }
+    });
+
+    // Listen for player joined
+    socketService.onPlayerJoined(({ username }) => {
+      console.log(`✅ ${username} joined the game`);
+      setOpponentOnline(true);
+    });
+
+    // Listen for player left
+    socketService.onPlayerLeft(({ username }) => {
+      console.log(`👋 ${username} left the game`);
+      setOpponentOnline(false);
+    });
+
+    // Listen for player disconnected
+    socketService.onPlayerDisconnected(({ username }) => {
+      console.log(`❌ ${username} disconnected`);
+      setOpponentOnline(false);
+    });
+
+    // Listen for game state updates
+    socketService.onGameState((gameData) => {
+      console.log('📊 Received game state update');
+      setGame(gameData);
+      chess.load(gameData.fen);
+      setPosition(gameData.fen);
+    });
+  };
+
+  // ============================================
+  // FETCH GAME STATE (REST API)
+  // ============================================
   const fetchGame = async () => {
     try {
       const response = await gameAPI.getGame(gameId);
@@ -45,6 +136,9 @@ const Game = () => {
     }
   };
 
+  // ============================================
+  // GAME LOGIC
+  // ============================================
   const isMyTurn = () => {
     if (!game || !user) return false;
 
@@ -65,64 +159,75 @@ const Game = () => {
     return game.players.white._id === user.id ? 'white' : 'black';
   };
 
+  // ============================================
+  // HANDLE MOVE
+  // ============================================
   const handleMove = async (from, to) => {
-  const move = { from, to, promotion: 'q' };
+    const move = { from, to, promotion: 'q' };
 
-  const testChess = new Chess(position);
-  const testMove = testChess.move(move);
-  
-  if (!testMove) {
-    alert('Invalid move!');
-    return;
-  }
-
-  try {
-    let response;
-    if (game.isBot) {
-      response = await gameAPI.makeBotMove(gameId, move);
-    } else {
-      response = await gameAPI.makeMove(gameId, move);
-    }
+    // Validate move locally first
+    const testChess = new Chess(position);
+    const testMove = testChess.move(move);
     
-    const newGame = response.data.game;
-    setGame(newGame);
-    chess.load(newGame.fen);
-    setPosition(newGame.fen);
-
-    // Show bot move notification
-    if (game.isBot && response.data.botMove) {
-      setTimeout(() => {
-        alert(`Stockfish played: ${response.data.botMove.san}`);
-      }, 100);
+    if (!testMove) {
+      alert('Invalid move!');
+      return;
     }
 
-    if (response.data.gameStatus.isCheckmate) {
-      setTimeout(() => {
-        const winner = newGame.winner?.username || 'Stockfish';
-        alert(`🏆 Checkmate! ${winner} wins!`);
-        
-        // Refresh to show updated rating
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
-      }, 200);
-    } else if (response.data.gameStatus.isDraw) {
-      setTimeout(() => {
-        alert('🤝 Game ended in a draw!');
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
-      }, 200);
-    } else if (response.data.gameStatus.isCheck) {
-      setTimeout(() => alert('Check!'), 200);
-    }
-  } catch (error) {
-    console.error('Error making move:', error);
-    alert(error.response?.data?.message || 'Invalid move');
-    fetchGame();
-  }
-};
+    try {
+      // Send move via REST API
+      let response;
+      if (game.isBot) {
+        response = await gameAPI.makeBotMove(gameId, move);
+      } else {
+        response = await gameAPI.makeMove(gameId, move);
+      }
+      
+      const newGame = response.data.game;
+      setGame(newGame);
+      chess.load(newGame.fen);
+      setPosition(newGame.fen);
 
+      // Notify via Socket.IO (for real-time updates)
+      socketService.notifyMove(gameId, move);
+
+      // Show bot move notification
+      if (game.isBot && response.data.botMove) {
+        setTimeout(() => {
+          alert(`Stockfish played: ${response.data.botMove.san}`);
+        }, 100);
+      }
+
+      // Check game status
+      if (response.data.gameStatus.isCheckmate) {
+        setTimeout(() => {
+          const winner = newGame.winner?.username || 'Stockfish';
+          alert(`🏆 Checkmate! ${winner} wins!`);
+          
+          setTimeout(() => {
+            window.location.reload();
+          }, 1000);
+        }, 200);
+      } else if (response.data.gameStatus.isDraw) {
+        setTimeout(() => {
+          alert('🤝 Game ended in a draw!');
+          setTimeout(() => {
+            window.location.reload();
+          }, 1000);
+        }, 200);
+      } else if (response.data.gameStatus.isCheck) {
+        setTimeout(() => alert('Check!'), 200);
+      }
+    } catch (error) {
+      console.error('Error making move:', error);
+      alert(error.response?.data?.message || 'Invalid move');
+      fetchGame();
+    }
+  };
+
+  // ============================================
+  // RESIGN GAME
+  // ============================================
   const handleResign = async () => {
     if (!window.confirm('Are you sure you want to resign?')) return;
     try {
@@ -134,6 +239,9 @@ const Game = () => {
     }
   };
 
+  // ============================================
+  // LOADING STATE
+  // ============================================
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -151,8 +259,23 @@ const Game = () => {
   return (
     <div className="min-h-screen py-8 px-4 text-[hsl(var(--color-foreground))] bg-[hsl(var(--color-background))]">
       <div className="max-w-7xl mx-auto space-y-6">
-        {/* Turn Indicator */}
-        <div className="text-center">
+        {/* Connection Status */}
+        <div className="flex justify-between items-center">
+          <Badge variant={socketConnected ? 'default' : 'destructive'}>
+            {socketConnected ? (
+              <>
+                <Wifi className="mr-1 h-3 w-3" />
+                Connected
+              </>
+            ) : (
+              <>
+                <WifiOff className="mr-1 h-3 w-3" />
+                Disconnected
+              </>
+            )}
+          </Badge>
+
+          {/* Turn Indicator */}
           {game.status === 'active' && (
             <Badge
               variant={myTurn ? 'default' : 'secondary'}
@@ -168,9 +291,9 @@ const Game = () => {
           )}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Chess Board */}
-          <div className="lg:col-span-3 flex justify-center">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Chess Board (2 columns) */}
+          <div className="lg:col-span-2 flex justify-center">
             <Card className="p-6">
               <ChessBoard
                 position={position}
@@ -181,7 +304,7 @@ const Game = () => {
             </Card>
           </div>
 
-          {/* Sidebar */}
+          {/* Sidebar (1 column) */}
           <div className="space-y-4">
             {/* Players Card */}
             <Card>
@@ -303,7 +426,7 @@ const Game = () => {
                   Moves
                 </CardTitle>
               </CardHeader>
-              <CardContent className="max-h-80 overflow-y-auto">
+              <CardContent className="max-h-60 overflow-y-auto">
                 {game.moves.length === 0 ? (
                   <p className="text-sm italic text-[hsl(var(--color-muted-foreground))]">
                     No moves yet...
@@ -322,6 +445,12 @@ const Game = () => {
                 )}
               </CardContent>
             </Card>
+
+            {/* CHAT PANEL */}
+            <ChatPanel 
+              gameId={gameId} 
+              currentUser={user.username}
+            />
           </div>
         </div>
       </div>
