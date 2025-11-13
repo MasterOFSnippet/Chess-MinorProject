@@ -137,11 +137,11 @@ class SocketService {
   }
 
   /**
-   * Listen for game state updates
+   * Listen for game state updates (from REST API broadcasts)
    */
-  onGameState(callback) {
+  onGameStateUpdate(callback) {
     if (!this.socket) return;
-    this.socket.on('game:state', callback);
+    this.socket.on('game:state-update', callback);
   }
 
   /**

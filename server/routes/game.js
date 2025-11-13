@@ -7,6 +7,7 @@ const {
   getMyGames,
   getActiveGames,
   resignGame,
+  abortGame,
   createBotGame,    // NEW
   makeBotMove       // NEW
 } = require('../controllers/gameController');
@@ -23,5 +24,6 @@ router.get('/:id', getGame);
 router.post('/:id/move', makeMove);
 router.post('/:id/move-bot', makeBotMove);  // NEW
 router.post('/:id/resign', resignGame);
+router.post('/:id/abort', abortGame);
 
 module.exports = router;

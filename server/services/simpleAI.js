@@ -19,14 +19,18 @@ class SimpleAI {
     };
   }
 
-  // Slightly smarter - prefer captures
-  getSmartMove(fen) {
+  // Slightly smarter - prefer captures and add thinking delay
+  async getSmartMove(fen) {
     const chess = new Chess(fen);
     const moves = chess.moves({ verbose: true });
     
     if (moves.length === 0) {
       return null;
     }
+
+    // Add thinking delay (300-800ms) to simulate human thinking
+    const thinkingTime = 300 + Math.random() * 500;
+    await new Promise(resolve => setTimeout(resolve, thinkingTime));
 
     // Prefer captures
     const captures = moves.filter(m => m.captured);

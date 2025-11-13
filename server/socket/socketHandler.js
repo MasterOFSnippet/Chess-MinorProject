@@ -126,44 +126,23 @@ const socketHandler = (io) => {
 
     /**
      * MAKE MOVE
-     * When a player makes a move, validate and broadcast to opponent
+     * When a player makes a move, broadcast to opponent immediately
      */
     socket.on('game:move', async ({ gameId, move }) => {
       try {
-        console.log(`♟️ ${socket.username} attempting move in ${gameId}:`, move);
+        console.log(`♟️ ${socket.username} made move in ${gameId}:`, move);
 
-        const game = await Game.findById(gameId)
-          .populate('players.white players.black', 'username rating');
-
-        if (!game) {
-          socket.emit('error', { message: 'Game not found' });
-          return;
-        }
-
-        // Verify it's player's turn
-        const isWhitePlayer = game.players.white?._id.toString() === socket.userId;
-        const isBlackPlayer = game.players.black?._id.toString() === socket.userId;
-        const currentTurn = game.currentTurn;
-
-        if ((currentTurn === 'white' && !isWhitePlayer) || 
-            (currentTurn === 'black' && !isBlackPlayer)) {
-          socket.emit('error', { message: 'Not your turn' });
-          return;
-        }
-
-        // Broadcast move to all players in the room
-        // The actual move validation happens on the backend via REST API
-        // Socket.IO just provides real-time notification
-        io.to(gameId).emit('game:move-made', {
+        // Broadcast to OTHER players in the room (not sender)
+        socket.to(gameId).emit('game:move-made', {
           move,
           playerId: socket.userId,
-          username: socket.username
+          username: socket.username,
+          timestamp: new Date()
         });
 
-        console.log(`✅ Move broadcast to game ${gameId}`);
+        console.log(`✅ Move broadcast to opponents in game ${gameId}`);
       } catch (error) {
-        console.error('Error handling move:', error);
-        socket.emit('error', { message: 'Failed to process move' });
+        console.error('Error broadcasting move:', error);
       }
     });
 

@@ -45,7 +45,7 @@ const gameSchema = new mongoose.Schema({
   },
   result: {
     type: String,
-    enum: ['1-0', '0-1', '1/2-1/2', 'ongoing'],
+    enum: ['1-0', '0-1', '1/2-1/2', 'aborted', 'ongoing'],
     default: 'ongoing'
   },
   winner: {

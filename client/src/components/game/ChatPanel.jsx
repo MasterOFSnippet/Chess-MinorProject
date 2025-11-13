@@ -30,7 +30,9 @@ const ChatPanel = ({ gameId, currentUser }) => {
   const typingTimeoutRef = useRef(null);
   const inputRef = useRef(null);
 
+  // ============================================
   // LOAD CHAT HISTORY
+  // ============================================
   useEffect(() => {
     loadChatHistory();
   }, [gameId]);
@@ -43,14 +45,19 @@ const ChatPanel = ({ gameId, currentUser }) => {
       });
       setMessages(response.data.messages || []);
       setLoading(false);
-      scrollToBottom();
+      // Only scroll on initial load, not every time
+      if (response.data.messages?.length > 0) {
+        setTimeout(scrollToBottom, 300);
+      }
     } catch (error) {
       console.error('Error loading chat history:', error);
       setLoading(false);
     }
   };
 
+  // ============================================
   // SOCKET.IO EVENT LISTENERS
+  // ============================================
   useEffect(() => {
     // Listen for incoming messages
     socketService.onMessage((newMessage) => {
@@ -78,14 +85,18 @@ const ChatPanel = ({ gameId, currentUser }) => {
     };
   }, [currentUser]);
 
+  // ============================================
   // AUTO-SCROLL TO BOTTOM
+  // ============================================
   const scrollToBottom = () => {
     setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
   };
 
+  // ============================================
   // SEND MESSAGE
+  // ============================================
   const handleSendMessage = (e) => {
     e.preventDefault();
     
@@ -104,7 +115,9 @@ const ChatPanel = ({ gameId, currentUser }) => {
     inputRef.current?.focus();
   };
 
+  // ============================================
   // TYPING INDICATOR
+  // ============================================
   const handleInputChange = (e) => {
     setInputMessage(e.target.value);
 
@@ -126,7 +139,9 @@ const ChatPanel = ({ gameId, currentUser }) => {
     }, 2000);
   };
 
+  // ============================================
   // FORMAT TIMESTAMP
+  // ============================================
   const formatTime = (timestamp) => {
     const date = new Date(timestamp);
     const now = new Date();
@@ -145,8 +160,9 @@ const ChatPanel = ({ gameId, currentUser }) => {
     });
   };
 
-
+  // ============================================
   // RENDER
+  // ============================================
   if (loading) {
     return (
       <Card>

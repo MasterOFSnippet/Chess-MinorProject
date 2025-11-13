@@ -54,13 +54,14 @@ export const userAPI = {
 // Add to gameAPI object
 export const gameAPI = {
   createGame: (opponentId) => api.post('/game/create', { opponentId }),
-  createBotGame: () => api.post('/game/create-bot'),  // NEW
+  createBotGame: () => api.post('/game/create-bot'), 
   getGame: (gameId) => api.get(`/game/${gameId}`),
   makeMove: (gameId, move) => api.post(`/game/${gameId}/move`, { move }),
-  makeBotMove: (gameId, move) => api.post(`/game/${gameId}/move-bot`, { move }),  // NEW
+  makeBotMove: (gameId, move) => api.post(`/game/${gameId}/move-bot`, { move }),  
   getMyGames: () => api.get('/game/my-games'),
   getActiveGames: () => api.get('/game/active'),
   resignGame: (gameId) => api.post(`/game/${gameId}/resign`),
+  abortGame: (gameId) => api.post(`/game/${gameId}/abort`),
 };
 
 export default api;
