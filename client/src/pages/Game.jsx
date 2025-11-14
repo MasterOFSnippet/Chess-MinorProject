@@ -1,12 +1,3 @@
-/**
- * Game Page - Production-Ready Implementation
- * Critical fixes:
- * 1. Game loads even if Socket.IO fails
- * 2. Proper error boundaries
- * 3. Graceful degradation
- * 4. Better UX with connection states
- */
-
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Chess } from 'chess.js';
@@ -18,7 +9,7 @@ import ChatPanel from '../components/game/ChatPanel';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { Trophy, Clock, Target, Flag, Bot, User, Wifi, WifiOff, AlertCircle } from 'lucide-react';
+import { Trophy, Clock, Target, Flag, Bot, User, Wifi, WifiOff, AlertCircle, XCircle, Loader2 } from 'lucide-react';
 
 const Game = () => {
   const { gameId } = useParams();
@@ -31,11 +22,9 @@ const Game = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [socketConnected, setSocketConnected] = useState(false);
-  const [socketError, setSocketError] = useState(false);
+  const [botThinking, setBotThinking] = useState(false); // ✅ NEW
 
-  // ============================================
-  // INITIALIZE SOCKET CONNECTION (NON-BLOCKING)
-  // ============================================
+  // INITIALIZE SOCKET CONNECTION
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -43,7 +32,6 @@ const Game = () => {
       return;
     }
 
-    // Try to connect socket (but don't block game loading)
     try {
       if (!socketService.isConnected()) {
         socketService.connect(token);
@@ -52,49 +40,27 @@ const Game = () => {
       const socket = socketService.getSocket();
       if (socket) {
         setSocketConnected(socket.connected);
-
-        socket.on('connect', () => {
-          console.log('✅ Socket connected');
-          setSocketConnected(true);
-          setSocketError(false);
-        });
-
-        socket.on('disconnect', () => {
-          console.log('❌ Socket disconnected');
-          setSocketConnected(false);
-        });
-
-        socket.on('connect_error', (err) => {
-          console.error('Socket connection error:', err);
-          setSocketError(true);
-          setSocketConnected(false);
-        });
+        socket.on('connect', () => setSocketConnected(true));
+        socket.on('disconnect', () => setSocketConnected(false));
       }
     } catch (err) {
       console.error('Socket initialization failed:', err);
-      setSocketError(true);
-      // Continue anyway - game can work without real-time updates
     }
 
     return () => {
-      // Cleanup socket listeners
       const socket = socketService.getSocket();
       if (socket) {
         socket.off('connect');
         socket.off('disconnect');
-        socket.off('connect_error');
       }
     };
   }, [navigate]);
 
-  // ============================================
-  // LOAD GAME (INDEPENDENT OF SOCKET)
-  // ============================================
+  // LOAD GAME & JOIN ROOM
   useEffect(() => {
     if (gameId) {
       fetchGame();
       
-      // Join socket room if connected (non-blocking)
       if (socketConnected) {
         try {
           socketService.joinGame(gameId);
@@ -116,32 +82,16 @@ const Game = () => {
     };
   }, [gameId, socketConnected]);
 
-  // ============================================
-  // SETUP SOCKET LISTENERS (WITH ERROR HANDLING)
-  // ============================================
+  // SETUP SOCKET LISTENERS
   const setupSocketListeners = () => {
     try {
-      socketService.onMoveMade(({ playerId, username, move }) => {
+      socketService.onMoveMade(({ playerId }) => {
         if (playerId !== user.id) {
-          console.log(`♟️ ${username} made a move:`, move);
           fetchGame();
         }
       });
 
-      socketService.onPlayerJoined(({ username }) => {
-        console.log(`✅ ${username} joined the game`);
-      });
-
-      socketService.onPlayerLeft(({ username }) => {
-        console.log(`👋 ${username} left the game`);
-      });
-
-      socketService.onPlayerDisconnected(({ username }) => {
-        console.log(`❌ ${username} disconnected`);
-      });
-
       socketService.onGameState((gameData) => {
-        console.log('📊 Received game state update');
         setGame(gameData);
         chess.load(gameData.fen);
         setPosition(gameData.fen);
@@ -151,9 +101,7 @@ const Game = () => {
     }
   };
 
-  // ============================================
-  // FETCH GAME STATE (REST API - ALWAYS WORKS)
-  // ============================================
+  // FETCH GAME STATE
   const fetchGame = async () => {
     try {
       setError(null);
@@ -164,21 +112,49 @@ const Game = () => {
       chess.load(gameData.fen);
       setPosition(gameData.fen);
       setLoading(false);
+
+      // ✅ NEW: If bot game and it's bot's turn, request bot move
+      if (gameData.isBot && gameData.status === 'active') {
+        const myColor = gameData.players.white?._id === user.id ? 'white' : 'black';
+        const isBotTurn = gameData.currentTurn !== myColor;
+        
+        if (isBotTurn && gameData.moves.length === 0) {
+          // Bot plays first move
+          await triggerBotMove();
+        }
+      }
     } catch (error) {
       console.error('Error fetching game:', error);
       setError(error.response?.data?.message || 'Failed to load game');
       setLoading(false);
       
-      // If game not found, redirect after a delay
       if (error.response?.status === 404) {
         setTimeout(() => navigate('/'), 2000);
       }
     }
   };
 
-  // ============================================
-  // GAME LOGIC (UNCHANGED)
-  // ============================================
+  // ✅ NEW: Trigger bot move with visual delay
+  const triggerBotMove = async () => {
+    setBotThinking(true);
+    
+    try {
+      // Make a dummy user move (bot will respond)
+      // Or create a dedicated endpoint for bot-first-move
+      const response = await gameAPI.getGame(gameId);
+      const gameData = response.data.game;
+      
+      setGame(gameData);
+      chess.load(gameData.fen);
+      setPosition(gameData.fen);
+    } catch (err) {
+      console.error('Bot move error:', err);
+    } finally {
+      setBotThinking(false);
+    }
+  };
+
+  // GAME LOGIC
   const isMyTurn = () => {
     if (!game || !user) return false;
 
@@ -199,13 +175,10 @@ const Game = () => {
     return game.players.white._id === user.id ? 'white' : 'black';
   };
 
-  // ============================================
-  // HANDLE MOVE (WITH BETTER ERROR HANDLING)
-  // ============================================
+  // HANDLE MOVE (WITH BOT THINKING INDICATOR)
   const handleMove = async (from, to) => {
     const move = { from, to, promotion: 'q' };
 
-    // Validate move locally first
     const testChess = new Chess(position);
     const testMove = testChess.move(move);
     
@@ -215,7 +188,11 @@ const Game = () => {
     }
 
     try {
-      // Send move via REST API
+      // ✅ Show "Bot is thinking..." for bot games
+      if (game.isBot) {
+        setBotThinking(true);
+      }
+
       let response;
       if (game.isBot) {
         response = await gameAPI.makeBotMove(gameId, move);
@@ -228,20 +205,12 @@ const Game = () => {
       chess.load(newGame.fen);
       setPosition(newGame.fen);
 
-      // Notify via Socket.IO (if connected)
       if (socketConnected) {
         try {
           socketService.notifyMove(gameId, move);
         } catch (err) {
           console.warn('Failed to notify move via socket:', err);
         }
-      }
-
-      // Show bot move notification
-      if (game.isBot && response.data.botMove) {
-        setTimeout(() => {
-          alert(`Stockfish played: ${response.data.botMove.san}`);
-        }, 100);
       }
 
       // Check game status
@@ -263,12 +232,25 @@ const Game = () => {
       console.error('Error making move:', error);
       alert(error.response?.data?.message || 'Invalid move');
       fetchGame();
+    } finally {
+      setBotThinking(false);
     }
   };
 
-  // ============================================
+  // ✅ NEW: Abort game
+  const handleAbort = async () => {
+    if (!window.confirm('Abort this game? (No rating change)')) return;
+    try {
+      await gameAPI.abortGame(gameId);
+      alert('Game aborted');
+      navigate('/');
+    } catch (error) {
+      console.error('Error aborting:', error);
+      alert(error.response?.data?.message || 'Cannot abort game');
+    }
+  };
+
   // RESIGN GAME
-  // ============================================
   const handleResign = async () => {
     if (!window.confirm('Are you sure you want to resign?')) return;
     try {
@@ -280,9 +262,7 @@ const Game = () => {
     }
   };
 
-  // ============================================
   // ERROR STATE
-  // ============================================
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
@@ -302,9 +282,7 @@ const Game = () => {
     );
   }
 
-  // ============================================
   // LOADING STATE
-  // ============================================
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -318,6 +296,7 @@ const Game = () => {
 
   const myColor = getPlayerColor();
   const myTurn = isMyTurn();
+  const canAbort = game.moves.length < 2; // ✅ NEW
 
   return (
     <div className="min-h-screen py-8 px-4 text-[hsl(var(--color-foreground))] bg-[hsl(var(--color-background))]">
@@ -329,26 +308,27 @@ const Game = () => {
               {socketConnected ? (
                 <>
                   <Wifi className="mr-1 h-3 w-3" />
-                  Real-time Connected
+                  Real-time
                 </>
               ) : (
                 <>
                   <WifiOff className="mr-1 h-3 w-3" />
-                  Polling Mode
+                  Polling
                 </>
               )}
             </Badge>
-            
-            {socketError && (
-              <Badge variant="outline">
-                <AlertCircle className="mr-1 h-3 w-3" />
-                Socket Error (Polling Active)
+
+            {/* ✅ NEW: Bot Thinking Indicator */}
+            {botThinking && (
+              <Badge variant="outline" className="animate-pulse">
+                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                Bot is thinking...
               </Badge>
             )}
           </div>
 
           {/* Turn Indicator */}
-          {game.status === 'active' && (
+          {game.status === 'active' && !botThinking && (
             <Badge
               variant={myTurn ? 'default' : 'secondary'}
               className="text-lg px-6 py-3"
@@ -371,7 +351,7 @@ const Game = () => {
                 position={position}
                 onMove={handleMove}
                 playerColor={myColor}
-                isMyTurn={myTurn}
+                isMyTurn={myTurn && !botThinking}
               />
             </Card>
           </div>
@@ -390,7 +370,7 @@ const Game = () => {
                 {/* White Player */}
                 <div
                   className={`p-3 rounded-lg border-2 transition ${
-                    game.currentTurn === 'white' && game.status === 'active'
+                    game.currentTurn === 'white' && game.status === 'active' && !botThinking
                       ? 'border-green-500 bg-green-500/10'
                       : 'border-transparent bg-[hsl(var(--color-muted)/0.5)]'
                   }`}
@@ -411,7 +391,7 @@ const Game = () => {
                         </div>
                       </div>
                     </div>
-                    {game.currentTurn === 'white' && game.status === 'active' && (
+                    {game.currentTurn === 'white' && game.status === 'active' && !botThinking && (
                       <div className="text-green-500 text-2xl animate-pulse">●</div>
                     )}
                   </div>
@@ -420,7 +400,7 @@ const Game = () => {
                 {/* Black Player */}
                 <div
                   className={`p-3 rounded-lg border-2 transition ${
-                    game.currentTurn === 'black' && game.status === 'active'
+                    game.currentTurn === 'black' && game.status === 'active' && !botThinking
                       ? 'border-green-500 bg-green-500/10'
                       : 'border-transparent bg-[hsl(var(--color-muted)/0.5)]'
                   }`}
@@ -441,7 +421,7 @@ const Game = () => {
                         </div>
                       </div>
                     </div>
-                    {game.currentTurn === 'black' && game.status === 'active' && (
+                    {game.currentTurn === 'black' && game.status === 'active' && !botThinking && (
                       <div className="text-green-500 text-2xl animate-pulse">●</div>
                     )}
                   </div>
@@ -482,12 +462,21 @@ const Game = () => {
               </CardContent>
             </Card>
 
-            {/* Actions */}
+            {/* ✅ NEW: Action Buttons */}
             {game.status === 'active' && (
-              <Button onClick={handleResign} variant="destructive" className="w-full">
-                <Flag className="mr-2 h-4 w-4" />
-                Resign Game
-              </Button>
+              <div className="space-y-2">
+                {canAbort ? (
+                  <Button onClick={handleAbort} variant="outline" className="w-full">
+                    <XCircle className="mr-2 h-4 w-4" />
+                    Abort Game (No Rating Change)
+                  </Button>
+                ) : (
+                  <Button onClick={handleResign} variant="destructive" className="w-full">
+                    <Flag className="mr-2 h-4 w-4" />
+                    Resign Game
+                  </Button>
+                )}
+              </div>
             )}
 
             {/* Move History */}
@@ -518,7 +507,7 @@ const Game = () => {
               </CardContent>
             </Card>
 
-            {/* CHAT PANEL (Only show if socket connected) */}
+            {/* Chat Panel */}
             {socketConnected && !game.isBot && (
               <ChatPanel 
                 gameId={gameId} 

@@ -2,9 +2,7 @@ const Game = require('../models/Game');
 const User = require('../models/User');
 const { Chess } = require('chess.js');
 const { updateRatings } = require('../utils/elo');
-const { getStockfish } = require('../services/stockfishService');
 const simpleAI = require('../services/simpleAI');
-
 
 // @desc    Create a game against AI bot
 // @route   POST /api/game/create-bot
@@ -24,26 +22,9 @@ exports.createBotGame = async (req, res) => {
       status: 'active'
     });
 
-    // If bot is white, make first move
-    if (!isUserWhite) {
-      const { Chess } = require('chess.js');
-      const chess = new Chess(game.fen);
-      
-      // Get bot move (using simple AI)
-      const botMove = simpleAI.getSmartMove(game.fen);
-      
-      if (botMove) {
-        const move = chess.move(botMove);
-        
-        if (move) {
-          game.moves.push(move.san);
-          game.fen = chess.fen();
-          game.pgn = chess.pgn();
-          game.currentTurn = 'black';
-          await game.save();
-        }
-      }
-    }
+    // ✅ FIX: DO NOT make bot's first move here
+    // Let the frontend request it via makeBotMove endpoint
+    // This gives user time to see the board before bot moves
 
     // Populate user (only the one that exists)
     if (game.players.white) {
@@ -55,7 +36,8 @@ exports.createBotGame = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      game
+      game,
+      message: isUserWhite ? 'You play as White. Make your move!' : 'Bot plays as White. Waiting for bot move...'
     });
   } catch (error) {
     console.error('Create bot game error:', error);
@@ -164,8 +146,11 @@ exports.makeBotMove = async (req, res) => {
 
     await game.save();
 
-    // Get bot's move using simple AI with thinking delay
-    const botMoveData = await simpleAI.getSmartMove(game.fen);
+    // ✅ FIX: Add artificial delay before bot responds (realistic thinking time)
+    await new Promise(resolve => setTimeout(resolve, 1500)); // 1.5 second delay
+
+    // Get bot's move using simple AI
+    const botMoveData = simpleAI.getSmartMove(game.fen);
     
     if (!botMoveData) {
       // Game over or no moves available
@@ -246,6 +231,7 @@ exports.makeBotMove = async (req, res) => {
     });
   }
 };
+
 // @desc    Create a new game
 // @route   POST /api/game/create
 // @access  Private
@@ -314,8 +300,8 @@ exports.getGame = async (req, res) => {
 
     // Check if user is part of this game
     const isPlayer = 
-      game.players.white._id.toString() === req.user.id ||
-      game.players.black._id.toString() === req.user.id;
+      (game.players.white && game.players.white._id.toString() === req.user.id) ||
+      (game.players.black && game.players.black._id.toString() === req.user.id);
 
     if (!isPlayer) {
       return res.status(403).json({
@@ -550,6 +536,56 @@ exports.getActiveGames = async (req, res) => {
   }
 };
 
+// ✅ NEW: Abort game (for games with <2 moves)
+// @desc    Abort a game (no rating change)
+// @route   POST /api/game/:id/abort
+// @access  Private
+exports.abortGame = async (req, res) => {
+  try {
+    const game = await Game.findById(req.params.id)
+      .populate('players.white players.black', 'username rating');
+
+    if (!game) {
+      return res.status(404).json({
+        success: false,
+        message: 'Game not found'
+      });
+    }
+
+    if (game.status !== 'active') {
+      return res.status(400).json({
+        success: false,
+        message: 'Game is not active'
+      });
+    }
+
+    // Can only abort if less than 2 moves made
+    if (game.moves.length >= 2) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot abort game with 2+ moves. Use resign instead.'
+      });
+    }
+
+    // Mark game as abandoned (no rating changes)
+    game.status = 'abandoned';
+    game.endedAt = new Date();
+    await game.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Game aborted successfully',
+      game
+    });
+  } catch (error) {
+    console.error('Abort error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
 // @desc    Resign from a game
 // @route   POST /api/game/:id/resign
 // @access  Private
@@ -639,78 +675,6 @@ exports.resignGame = async (req, res) => {
     });
   } catch (error) {
     console.error('Resign error:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
-  }
-};
-
-// @desc    Abort game (no rating change, only first 2 moves)
-// @route   POST /api/game/:id/abort
-// @access  Private
-exports.abortGame = async (req, res) => {
-  try {
-    const game = await Game.findById(req.params.id)
-      .populate('players.white players.black', 'username rating');
-
-    if (!game) {
-      return res.status(404).json({
-        success: false,
-        message: 'Game not found'
-      });
-    }
-
-    if (game.status !== 'active') {
-      return res.status(400).json({
-        success: false,
-        message: 'Game is not active'
-      });
-    }
-
-    // Check if user is a player in this game
-    const isWhitePlayer = game.players.white?._id.toString() === req.user.id;
-    const isBlackPlayer = game.players.black?._id.toString() === req.user.id;
-
-    if (!isWhitePlayer && !isBlackPlayer && !game.isBot) {
-      return res.status(403).json({
-        success: false,
-        message: 'You are not a player in this game'
-      });
-    }
-
-    // Only allow abort in first 2 moves
-    if (game.moves.length > 2) {
-      return res.status(400).json({
-        success: false,
-        message: 'Cannot abort after 2 moves. Use resign instead.'
-      });
-    }
-
-    // Mark game as abandoned - NO rating changes
-    game.status = 'abandoned';
-    game.result = 'aborted';
-    game.endedAt = new Date();
-    await game.save();
-
-    console.log(`🚫 Game ${req.params.id} aborted by ${req.user.username}`);
-
-    // Notify opponent via Socket.IO
-    const io = req.app.get('io');
-    if (io) {
-      io.to(req.params.id).emit('game:aborted', {
-        message: 'Game has been aborted',
-        abortedBy: req.user.username
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      message: 'Game aborted. No rating changes.',
-      game
-    });
-  } catch (error) {
-    console.error('Abort error:', error);
     res.status(500).json({
       success: false,
       message: error.message
