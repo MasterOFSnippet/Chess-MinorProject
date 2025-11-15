@@ -3,13 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Chess } from 'chess.js';
 import { gameAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import socketService from '../services/socketService';
 import ChessBoard from '../components/ChessBoard/ChessBoard';
-import ChatPanel from '../components/game/ChatPanel';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { Trophy, Clock, Target, Flag, Bot, User, Wifi, WifiOff, AlertCircle, XCircle, Loader2 } from 'lucide-react';
+import { Trophy, Clock, Target, Flag, Bot, User, AlertCircle, XCircle, Loader2, Wifi, WifiOff } from 'lucide-react';
 
 const Game = () => {
   const { gameId } = useParams();
@@ -21,110 +19,40 @@ const Game = () => {
   const [position, setPosition] = useState('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [socketConnected, setSocketConnected] = useState(false);
-  const [botThinking, setBotThinking] = useState(false); // ✅ NEW
+  const [botThinking, setBotThinking] = useState(false);
 
-  // INITIALIZE SOCKET CONNECTION
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      navigate('/login');
-      return;
-    }
-
-    try {
-      if (!socketService.isConnected()) {
-        socketService.connect(token);
-      }
-
-      const socket = socketService.getSocket();
-      if (socket) {
-        setSocketConnected(socket.connected);
-        socket.on('connect', () => setSocketConnected(true));
-        socket.on('disconnect', () => setSocketConnected(false));
-      }
-    } catch (err) {
-      console.error('Socket initialization failed:', err);
-    }
-
-    return () => {
-      const socket = socketService.getSocket();
-      if (socket) {
-        socket.off('connect');
-        socket.off('disconnect');
-      }
-    };
-  }, [navigate]);
-
-  // LOAD GAME & JOIN ROOM
+  // ============================================
+  // LOAD GAME
+  // ============================================
   useEffect(() => {
     if (gameId) {
       fetchGame();
       
-      if (socketConnected) {
-        try {
-          socketService.joinGame(gameId);
-          setupSocketListeners();
-        } catch (err) {
-          console.error('Failed to join socket room:', err);
-        }
+      // For human vs human games, poll for updates
+      if (game && !game.isBot && game.status === 'active') {
+        const interval = setInterval(fetchGame, 3000);
+        return () => clearInterval(interval);
       }
     }
+  }, [gameId, game?.isBot]);
 
-    return () => {
-      if (socketConnected && gameId) {
-        try {
-          socketService.leaveGame(gameId);
-        } catch (err) {
-          console.error('Failed to leave socket room:', err);
-        }
-      }
-    };
-  }, [gameId, socketConnected]);
-
-  // SETUP SOCKET LISTENERS
-  const setupSocketListeners = () => {
-    try {
-      socketService.onMoveMade(({ playerId }) => {
-        if (playerId !== user.id) {
-          fetchGame();
-        }
-      });
-
-      socketService.onGameState((gameData) => {
-        setGame(gameData);
-        chess.load(gameData.fen);
-        setPosition(gameData.fen);
-      });
-    } catch (err) {
-      console.error('Failed to setup socket listeners:', err);
-    }
-  };
-
+  // ============================================
   // FETCH GAME STATE
+  // ============================================
   const fetchGame = async () => {
     try {
       setError(null);
       const response = await gameAPI.getGame(gameId);
       const gameData = response.data.game;
 
+      console.log('📥 Game loaded:', gameData);
+
       setGame(gameData);
       chess.load(gameData.fen);
       setPosition(gameData.fen);
       setLoading(false);
-
-      // ✅ NEW: If bot game and it's bot's turn, request bot move
-      if (gameData.isBot && gameData.status === 'active') {
-        const myColor = gameData.players.white?._id === user.id ? 'white' : 'black';
-        const isBotTurn = gameData.currentTurn !== myColor;
-        
-        if (isBotTurn && gameData.moves.length === 0) {
-          // Bot plays first move
-          await triggerBotMove();
-        }
-      }
     } catch (error) {
-      console.error('Error fetching game:', error);
+      console.error('❌ Error fetching game:', error);
       setError(error.response?.data?.message || 'Failed to load game');
       setLoading(false);
       
@@ -134,27 +62,9 @@ const Game = () => {
     }
   };
 
-  // ✅ NEW: Trigger bot move with visual delay
-  const triggerBotMove = async () => {
-    setBotThinking(true);
-    
-    try {
-      // Make a dummy user move (bot will respond)
-      // Or create a dedicated endpoint for bot-first-move
-      const response = await gameAPI.getGame(gameId);
-      const gameData = response.data.game;
-      
-      setGame(gameData);
-      chess.load(gameData.fen);
-      setPosition(gameData.fen);
-    } catch (err) {
-      console.error('Bot move error:', err);
-    } finally {
-      setBotThinking(false);
-    }
-  };
-
+  // ============================================
   // GAME LOGIC
+  // ============================================
   const isMyTurn = () => {
     if (!game || !user) return false;
 
@@ -175,29 +85,40 @@ const Game = () => {
     return game.players.white._id === user.id ? 'white' : 'black';
   };
 
-  // HANDLE MOVE (WITH BOT THINKING INDICATOR)
+  // ============================================
+  // HANDLE MOVE
+  // ============================================
   const handleMove = async (from, to) => {
     const move = { from, to, promotion: 'q' };
+    
+    console.log('🎯 Attempting move:', move);
 
+    // Validate locally first
     const testChess = new Chess(position);
     const testMove = testChess.move(move);
     
     if (!testMove) {
+      console.error('❌ Invalid move locally:', move);
       alert('Invalid move!');
       return;
     }
 
     try {
-      // ✅ Show "Bot is thinking..." for bot games
+      // Show thinking indicator for bot games
       if (game.isBot) {
+        console.log('🤖 Bot game detected');
         setBotThinking(true);
       }
 
       let response;
       if (game.isBot) {
+        console.log('📤 Sending bot move to server:', move);
         response = await gameAPI.makeBotMove(gameId, move);
+        console.log('📥 Bot response:', response.data);
       } else {
+        console.log('📤 Sending player move to server:', move);
         response = await gameAPI.makeMove(gameId, move);
+        console.log('📥 Player response:', response.data);
       }
       
       const newGame = response.data.game;
@@ -205,39 +126,45 @@ const Game = () => {
       chess.load(newGame.fen);
       setPosition(newGame.fen);
 
-      if (socketConnected) {
-        try {
-          socketService.notifyMove(gameId, move);
-        } catch (err) {
-          console.warn('Failed to notify move via socket:', err);
-        }
-      }
-
       // Check game status
       if (response.data.gameStatus.isCheckmate) {
         setTimeout(() => {
-          const winner = newGame.winner?.username || 'Stockfish';
-          alert(`🏆 Checkmate! ${winner} wins!`);
-          setTimeout(() => window.location.reload(), 1000);
+          const winner = newGame.winner;
+          let winnerName = 'Unknown';
+          
+          if (game.isBot) {
+            if (winner && winner.toString() === user.id) {
+              winnerName = 'You';
+            } else {
+              winnerName = 'Stockfish';
+            }
+          } else {
+            winnerName = newGame.winner?.username || 'Unknown';
+          }
+          
+          alert(`🏆 Checkmate! ${winnerName} wins!`);
+          setTimeout(() => navigate('/'), 1500);
         }, 200);
       } else if (response.data.gameStatus.isDraw) {
         setTimeout(() => {
           alert('🤝 Game ended in a draw!');
-          setTimeout(() => window.location.reload(), 1000);
+          setTimeout(() => navigate('/'), 1500);
         }, 200);
       } else if (response.data.gameStatus.isCheck) {
         setTimeout(() => alert('Check!'), 200);
       }
     } catch (error) {
-      console.error('Error making move:', error);
+      console.error('❌ Error making move:', error);
       alert(error.response?.data?.message || 'Invalid move');
-      fetchGame();
+      fetchGame(); // Refresh game state
     } finally {
       setBotThinking(false);
     }
   };
 
-  // ✅ NEW: Abort game
+  // ============================================
+  // ABORT GAME
+  // ============================================
   const handleAbort = async () => {
     if (!window.confirm('Abort this game? (No rating change)')) return;
     try {
@@ -245,12 +172,14 @@ const Game = () => {
       alert('Game aborted');
       navigate('/');
     } catch (error) {
-      console.error('Error aborting:', error);
+      console.error('❌ Error aborting:', error);
       alert(error.response?.data?.message || 'Cannot abort game');
     }
   };
 
+  // ============================================
   // RESIGN GAME
+  // ============================================
   const handleResign = async () => {
     if (!window.confirm('Are you sure you want to resign?')) return;
     try {
@@ -258,11 +187,13 @@ const Game = () => {
       alert('You have resigned');
       navigate('/');
     } catch (error) {
-      console.error('Error resigning:', error);
+      console.error('❌ Error resigning:', error);
     }
   };
 
+  // ============================================
   // ERROR STATE
+  // ============================================
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
@@ -282,7 +213,9 @@ const Game = () => {
     );
   }
 
+  // ============================================
   // LOADING STATE
+  // ============================================
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -296,39 +229,36 @@ const Game = () => {
 
   const myColor = getPlayerColor();
   const myTurn = isMyTurn();
-  const canAbort = game.moves.length < 2; // ✅ NEW
+  const canAbort = game.moves.length < 2;
 
   return (
     <div className="min-h-screen py-8 px-4 text-[hsl(var(--color-foreground))] bg-[hsl(var(--color-background))]">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Connection Status */}
         <div className="flex justify-between items-center flex-wrap gap-2">
-          <div className="flex gap-2">
-            <Badge variant={socketConnected ? 'default' : 'secondary'}>
-              {socketConnected ? (
-                <>
-                  <Wifi className="mr-1 h-3 w-3" />
-                  Real-time
-                </>
-              ) : (
-                <>
-                  <WifiOff className="mr-1 h-3 w-3" />
-                  Polling
-                </>
-              )}
-            </Badge>
-
-            {/* ✅ NEW: Bot Thinking Indicator */}
-            {botThinking && (
-              <Badge variant="outline" className="animate-pulse">
-                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                Bot is thinking...
-              </Badge>
+          <Badge variant="secondary">
+            {game.isBot ? (
+              <>
+                <Bot className="mr-1 h-3 w-3" />
+                Bot Game
+              </>
+            ) : (
+              <>
+                <Wifi className="mr-1 h-3 w-3" />
+                Live Game (Auto-refresh)
+              </>
             )}
-          </div>
+          </Badge>
 
           {/* Turn Indicator */}
-          {game.status === 'active' && !botThinking && (
+          {botThinking && (
+            <Badge variant="outline" className="animate-pulse text-lg px-6 py-3">
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              Bot is thinking...
+            </Badge>
+          )}
+
+          {!botThinking && game.status === 'active' && (
             <Badge
               variant={myTurn ? 'default' : 'secondary'}
               className="text-lg px-6 py-3"
@@ -336,6 +266,7 @@ const Game = () => {
               {myTurn ? '🟢 YOUR TURN' : '🔴 OPPONENT\'S TURN'}
             </Badge>
           )}
+
           {game.status === 'completed' && (
             <Badge variant="secondary" className="text-lg px-6 py-3">
               ⚔️ Game Over
@@ -462,7 +393,7 @@ const Game = () => {
               </CardContent>
             </Card>
 
-            {/* ✅ NEW: Action Buttons */}
+            {/* Action Buttons */}
             {game.status === 'active' && (
               <div className="space-y-2">
                 {canAbort ? (
@@ -507,12 +438,21 @@ const Game = () => {
               </CardContent>
             </Card>
 
-            {/* Chat Panel */}
-            {socketConnected && !game.isBot && (
-              <ChatPanel 
-                gameId={gameId} 
-                currentUser={user.username}
-              />
+            {/* Chat Panel - Only for human vs human games */}
+            {!game.isBot && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Chat</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-sm text-[hsl(var(--color-muted-foreground))] italic">
+                    💬 Chat coming soon! For now, focus on your moves.
+                  </div>
+                  <div className="mt-3 text-xs text-[hsl(var(--color-muted-foreground))]">
+                    Tip: Game auto-refreshes every 3 seconds
+                  </div>
+                </CardContent>
+              </Card>
             )}
           </div>
         </div>

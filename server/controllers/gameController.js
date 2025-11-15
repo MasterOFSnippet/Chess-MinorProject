@@ -9,7 +9,6 @@ const simpleAI = require('../services/simpleAI');
 // @access  Private
 exports.createBotGame = async (req, res) => {
   try {
-    // Randomly assign user as white or black
     const isUserWhite = Math.random() < 0.5;
 
     const game = await Game.create({
@@ -22,11 +21,42 @@ exports.createBotGame = async (req, res) => {
       status: 'active'
     });
 
-    // ✅ FIX: DO NOT make bot's first move here
-    // Let the frontend request it via makeBotMove endpoint
-    // This gives user time to see the board before bot moves
+    // ✅ FIX: If bot plays White, make first move immediately
+    if (!isUserWhite) {
+      const chess = new Chess(game.fen);
+      
+      // Add realistic thinking delay
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+      const botMoveData = simpleAI.getSmartMove(game.fen);
+      console.log('🤖 Bot opening move:', botMoveData);
+      
+      if (botMoveData) {
+        let move;
+        try {
+          move = chess.move(botMoveData);
+          console.log('✅ Bot played:', move.san);
+        } catch (err) {
+          console.error('❌ Bot opening move failed:', err);
+          // Try fallback
+          try {
+            move = chess.move({ from: botMoveData.from, to: botMoveData.to });
+          } catch (err2) {
+            console.error('❌ Fallback failed too');
+          }
+        }
+        
+        if (move) {
+          game.moves.push(move.san);
+          game.fen = chess.fen();
+          game.pgn = chess.pgn();
+          game.currentTurn = 'black';
+          await game.save();
+        }
+      }
+    }
 
-    // Populate user (only the one that exists)
+    // Populate user
     if (game.players.white) {
       await game.populate('players.white', 'username rating');
     }
@@ -37,7 +67,7 @@ exports.createBotGame = async (req, res) => {
     res.status(201).json({
       success: true,
       game,
-      message: isUserWhite ? 'You play as White. Make your move!' : 'Bot plays as White. Waiting for bot move...'
+      message: isUserWhite ? 'You play as White. Make your move!' : 'Bot played first move as White.'
     });
   } catch (error) {
     console.error('Create bot game error:', error);
@@ -57,17 +87,10 @@ exports.makeBotMove = async (req, res) => {
 
     const game = await Game.findById(req.params.id);
 
-    if (!game) {
-      return res.status(404).json({
-        success: false,
-        message: 'Game not found'
-      });
-    }
-
-    if (!game.isBot) {
+    if (!game || !game.isBot) {
       return res.status(400).json({
         success: false,
-        message: 'This is not a bot game'
+        message: 'Invalid bot game'
       });
     }
 
@@ -79,7 +102,6 @@ exports.makeBotMove = async (req, res) => {
     }
 
     // Validate and make user's move
-    const { Chess } = require('chess.js');
     const chess = new Chess(game.fen);
 
     let moveResult;
@@ -112,7 +134,8 @@ exports.makeBotMove = async (req, res) => {
 
       if (chess.isCheckmate()) {
         game.winner = req.user.id;
-        game.result = (game.players.white && game.players.white.toString() === req.user.id) ? '1-0' : '0-1';
+        const userIsWhite = game.players.white && game.players.white.toString() === req.user.id;
+        game.result = userIsWhite ? '1-0' : '0-1';
         
         await User.findByIdAndUpdate(req.user.id, {
           $inc: { wins: 1, gamesPlayed: 1, rating: 10 }
@@ -125,7 +148,13 @@ exports.makeBotMove = async (req, res) => {
       }
 
       await game.save();
-      await game.populate('players.white players.black', 'username rating');
+      
+      if (game.players.white) {
+        await game.populate('players.white', 'username rating');
+      }
+      if (game.players.black) {
+        await game.populate('players.black', 'username rating');
+      }
 
       return res.status(200).json({
         success: true,
@@ -146,14 +175,18 @@ exports.makeBotMove = async (req, res) => {
 
     await game.save();
 
-    // ✅ FIX: Add artificial delay before bot responds (realistic thinking time)
-    await new Promise(resolve => setTimeout(resolve, 1500)); // 1.5 second delay
+    // ✅ Artificial thinking delay (realistic bot "thinking" time)
+    const thinkingTime = 1500 + Math.random() * 1000; // 1.5-2.5 seconds
+    console.log(`🤔 Bot thinking for ${Math.round(thinkingTime)}ms...`);
+    await new Promise(resolve => setTimeout(resolve, thinkingTime));
 
-    // Get bot's move using simple AI
+    // Get bot's move
     const botMoveData = simpleAI.getSmartMove(game.fen);
     
+    console.log('🤖 Bot selected move:', botMoveData);
+    
     if (!botMoveData) {
-      // Game over or no moves available
+      console.log('⚠️ No valid bot move available');
       game.status = 'completed';
       game.result = '1/2-1/2';
       await game.save();
@@ -165,7 +198,30 @@ exports.makeBotMove = async (req, res) => {
       });
     }
 
-    const botMove = chess.move(botMoveData);
+    // ✅ FIX: Ensure correct format for chess.js
+    let botMove;
+    try {
+      botMove = chess.move(botMoveData);
+      console.log('✅ Bot move executed:', botMove.san);
+    } catch (err) {
+      console.error('❌ Bot move failed:', err, 'Move data:', botMoveData);
+      
+      // Fallback: try as SAN notation
+      try {
+        botMove = chess.move(botMoveData.san || botMoveData);
+      } catch (err2) {
+        console.error('❌ Fallback also failed');
+        game.status = 'completed';
+        game.result = '1/2-1/2';
+        await game.save();
+        
+        return res.status(200).json({
+          success: true,
+          game,
+          gameStatus: { isGameOver: true, isDraw: true }
+        });
+      }
+    }
 
     if (botMove) {
       game.moves.push(botMove.san);
@@ -173,7 +229,6 @@ exports.makeBotMove = async (req, res) => {
       game.pgn = chess.pgn();
       game.currentTurn = game.currentTurn === 'white' ? 'black' : 'white';
 
-      // Check if game is over after bot move
       if (chess.isGameOver()) {
         game.status = 'completed';
         game.endedAt = new Date();
@@ -195,7 +250,6 @@ exports.makeBotMove = async (req, res) => {
       await game.save();
     }
 
-    // Populate user details
     if (game.players.white) {
       await game.populate('players.white', 'username rating');
     }
@@ -239,7 +293,6 @@ exports.createGame = async (req, res) => {
   try {
     const { opponentId } = req.body;
 
-    // Validate opponent exists
     const opponent = await User.findById(opponentId);
     if (!opponent) {
       return res.status(404).json({
@@ -248,7 +301,6 @@ exports.createGame = async (req, res) => {
       });
     }
 
-    // Can't play against yourself
     if (req.user.id === opponentId) {
       return res.status(400).json({
         success: false,
@@ -256,7 +308,6 @@ exports.createGame = async (req, res) => {
       });
     }
 
-    // Randomly assign colors
     const isUserWhite = Math.random() < 0.5;
 
     const game = await Game.create({
@@ -267,7 +318,6 @@ exports.createGame = async (req, res) => {
       status: 'active'
     });
 
-    // Populate player details
     await game.populate('players.white players.black', 'username rating');
 
     res.status(201).json({
@@ -298,7 +348,6 @@ exports.getGame = async (req, res) => {
       });
     }
 
-    // Check if user is part of this game
     const isPlayer = 
       (game.players.white && game.players.white._id.toString() === req.user.id) ||
       (game.players.black && game.players.black._id.toString() === req.user.id);
@@ -336,7 +385,6 @@ exports.makeMove = async (req, res) => {
       });
     }
 
-    // Check if game is still active
     if (game.status !== 'active') {
       return res.status(400).json({
         success: false,
@@ -344,7 +392,6 @@ exports.makeMove = async (req, res) => {
       });
     }
 
-    // Check if it's the user's turn
     const userColor = game.players.white._id.toString() === req.user.id ? 'white' : 'black';
     
     if (game.currentTurn !== userColor) {
@@ -354,8 +401,6 @@ exports.makeMove = async (req, res) => {
       });
     }
 
-    // Validate move using chess.js
-    const { Chess } = require('chess.js');
     const chess = new Chess(game.fen);
     
     let moveResult;
@@ -375,32 +420,25 @@ exports.makeMove = async (req, res) => {
       });
     }
 
-    // Update game state
     game.moves.push(moveResult.san);
     game.fen = chess.fen();
     game.pgn = chess.pgn();
     game.currentTurn = game.currentTurn === 'white' ? 'black' : 'white';
 
-    // Check for game over
     if (chess.isGameOver()) {
       game.status = 'completed';
       game.endedAt = new Date();
 
       if (chess.isCheckmate()) {
-        // Winner is the player who just moved
         game.winner = req.user.id;
         game.result = userColor === 'white' ? '1-0' : '0-1';
 
-        // Calculate ELO changes
         const ratingChanges = updateRatings(
           game.players.white.rating,
           game.players.black.rating,
           game.result
         );
 
-        console.log('🏆 ELO Changes:', ratingChanges);
-
-        // Update white player
         await User.findByIdAndUpdate(game.players.white._id, {
           $inc: { 
             wins: userColor === 'white' ? 1 : 0,
@@ -410,7 +448,6 @@ exports.makeMove = async (req, res) => {
           $set: { rating: ratingChanges.whiteRating }
         });
 
-        // Update black player
         await User.findByIdAndUpdate(game.players.black._id, {
           $inc: { 
             wins: userColor === 'black' ? 1 : 0,
@@ -420,21 +457,15 @@ exports.makeMove = async (req, res) => {
           $set: { rating: ratingChanges.blackRating }
         });
 
-        console.log(`✅ Updated ratings - White: ${ratingChanges.whiteRating} (${ratingChanges.whiteChange > 0 ? '+' : ''}${ratingChanges.whiteChange}), Black: ${ratingChanges.blackRating} (${ratingChanges.blackChange > 0 ? '+' : ''}${ratingChanges.blackChange})`);
-
       } else if (chess.isDraw()) {
         game.result = '1/2-1/2';
         
-        // Calculate ELO changes for draw
         const ratingChanges = updateRatings(
           game.players.white.rating,
           game.players.black.rating,
           game.result
         );
 
-        console.log('🤝 Draw - ELO Changes:', ratingChanges);
-
-        // Update both players for draw
         await User.findByIdAndUpdate(game.players.white._id, {
           $inc: { draws: 1, gamesPlayed: 1 },
           $set: { rating: ratingChanges.whiteRating }
@@ -448,8 +479,6 @@ exports.makeMove = async (req, res) => {
     }
 
     await game.save();
-
-    // Populate again after save
     await game.populate('players.white players.black', 'username rating');
 
     res.status(200).json({
@@ -480,9 +509,6 @@ exports.makeMove = async (req, res) => {
   }
 };
 
-// @desc    Get all games for logged in user
-// @route   GET /api/game/my-games
-// @access  Private
 exports.getMyGames = async (req, res) => {
   try {
     const games = await Game.find({
@@ -493,7 +519,7 @@ exports.getMyGames = async (req, res) => {
     })
     .populate('players.white players.black', 'username rating')
     .populate('winner', 'username')
-    .sort({ startedAt: -1 }); // Most recent first
+    .sort({ startedAt: -1 });
 
     res.status(200).json({
       success: true,
@@ -508,9 +534,6 @@ exports.getMyGames = async (req, res) => {
   }
 };
 
-// @desc    Get all active games
-// @route   GET /api/game/active
-// @access  Private
 exports.getActiveGames = async (req, res) => {
   try {
     const games = await Game.find({
@@ -536,10 +559,7 @@ exports.getActiveGames = async (req, res) => {
   }
 };
 
-// ✅ NEW: Abort game (for games with <2 moves)
-// @desc    Abort a game (no rating change)
-// @route   POST /api/game/:id/abort
-// @access  Private
+// ✅ NEW: Abort game
 exports.abortGame = async (req, res) => {
   try {
     const game = await Game.findById(req.params.id)
@@ -559,7 +579,6 @@ exports.abortGame = async (req, res) => {
       });
     }
 
-    // Can only abort if less than 2 moves made
     if (game.moves.length >= 2) {
       return res.status(400).json({
         success: false,
@@ -567,7 +586,6 @@ exports.abortGame = async (req, res) => {
       });
     }
 
-    // Mark game as abandoned (no rating changes)
     game.status = 'abandoned';
     game.endedAt = new Date();
     await game.save();
@@ -586,9 +604,6 @@ exports.abortGame = async (req, res) => {
   }
 };
 
-// @desc    Resign from a game
-// @route   POST /api/game/:id/resign
-// @access  Private
 exports.resignGame = async (req, res) => {
   try {
     const game = await Game.findById(req.params.id)
@@ -608,7 +623,6 @@ exports.resignGame = async (req, res) => {
       });
     }
 
-    // Don't update ELO for bot games on resign
     if (game.isBot) {
       game.status = 'completed';
       game.endedAt = new Date();
@@ -629,7 +643,6 @@ exports.resignGame = async (req, res) => {
       });
     }
 
-    // For human vs human games, update ELO
     const userColor = game.players.white._id.toString() === req.user.id ? 'white' : 'black';
     const winnerId = userColor === 'white' ? game.players.black._id : game.players.white._id;
 
@@ -638,16 +651,12 @@ exports.resignGame = async (req, res) => {
     game.winner = winnerId;
     game.endedAt = new Date();
 
-    // Calculate ELO (resigning = losing)
     const ratingChanges = updateRatings(
       game.players.white.rating,
       game.players.black.rating,
       game.result
     );
 
-    console.log('🏳️ Resignation - ELO Changes:', ratingChanges);
-
-    // Update both players
     await User.findByIdAndUpdate(game.players.white._id, {
       $inc: { 
         wins: userColor === 'black' ? 1 : 0,
