@@ -1,8 +1,29 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
-import { Gamepad2, Shield, Zap, Trophy, Bot, TrendingUp } from 'lucide-react';
+import { Gamepad2, Shield, Zap, Trophy, Bot, TrendingUp, Github, Linkedin, Mail } from 'lucide-react';
 
 const About = () => {
+  const contributors = [
+    {
+      name: 'Arav Gautam',
+      role: 'Full-Stack Developer',
+      bio: 'Led architecture design, Backend API, Socket.IO integration, and AI bot implementation',
+      contributions: ['Server Architecture', 'REST API', 'Socket.IO', 'Stockfish AI', 'ELO System'],
+      github: 'https://github.com/MasterOFSnippet',
+      linkedin: 'https://www.linkedin.com/in/arav-gautam-007swerty2024',
+      email: 'working.aravgautam@gmail.com'
+    },
+    {
+      name: 'Gaurav Mishra',
+      role: 'Full-Stack Developer',
+      bio: 'Frontend UI/UX, React components, Game logic, and real-time chat implementation',
+      contributions: ['Frontend Design', 'React Components', 'Game.jsx', 'Chat System', 'Tailwind CSS'],
+      github: 'https://github.com/iamgauravmisra',
+      linkedin: 'https://www.linkedin.com/in/gaurav-mishra-8aa936288',
+      email: 'iamgauravmisra@gmail.com'
+    }
+  ];
+
   return (
     <div className="min-h-screen py-12 px-4 text-[hsl(var(--color-foreground))] bg-[hsl(var(--color-background))]">
       <div className="max-w-5xl mx-auto space-y-8">
@@ -83,13 +104,13 @@ const About = () => {
                 <h3 className="text-lg font-semibold mb-4 text-[hsl(var(--color-primary))]">Frontend</h3>
                 <ul className="space-y-2">
                   {[
-                    'React 18 with Hooks',
+                    'React 19 with Hooks',
                     'Vite for blazing-fast builds',
                     'Tailwind CSS v4',
                     'shadcn/ui components',
                     'React Router v6',
                     'chess.js for game logic',
-                    'Axios for API calls'
+                    'Socket.IO for real-time chat'
                   ].map((tech, i) => (
                     <li key={i} className="flex items-center text-sm text-[hsl(var(--color-muted-foreground))]">
                       <span className="mr-2 text-[hsl(var(--color-primary))]">▹</span>
@@ -103,13 +124,13 @@ const About = () => {
                 <h3 className="text-lg font-semibold mb-4 text-[hsl(var(--color-primary))]">Backend</h3>
                 <ul className="space-y-2">
                   {[
-                    'Node.js & Express',
+                    'Node.js & Express.js',
                     'MongoDB with Mongoose',
                     'JWT Authentication',
+                    'Socket.IO for real-time',
                     'Stockfish Chess Engine',
                     'ELO Rating Algorithm',
-                    'bcrypt for password hashing',
-                    'RESTful API design'
+                    'bcrypt for security'
                   ].map((tech, i) => (
                     <li key={i} className="flex items-center text-sm text-[hsl(var(--color-muted-foreground))]">
                       <span className="mr-2 text-[hsl(var(--color-primary))]">▹</span>
@@ -122,10 +143,109 @@ const About = () => {
           </CardContent>
         </Card>
 
+        {/* ✅ CONTRIBUTORS SECTION */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Meet the Team</CardTitle>
+            <CardDescription>Passionate developers building the future of online chess</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {contributors.map((contributor, i) => (
+                <div 
+                  key={i}
+                  className="p-6 rounded-lg border border-[hsl(var(--color-border))] bg-[hsl(var(--color-card)/0.5)] hover:bg-[hsl(var(--color-card)/0.8)] transition-all hover:shadow-lg"
+                >
+                  {/* Name & Role */}
+                  <div className="mb-4">
+                    <h3 className="text-xl font-bold text-[hsl(var(--color-foreground))] mb-1">
+                      {contributor.name}
+                    </h3>
+                    <p className="text-sm text-[hsl(var(--color-primary))] font-semibold">
+                      {contributor.role}
+                    </p>
+                  </div>
+
+                  {/* Bio */}
+                  <p className="text-sm text-[hsl(var(--color-muted-foreground))] mb-4">
+                    {contributor.bio}
+                  </p>
+
+                  {/* Contributions */}
+                  <div className="mb-4">
+                    <p className="text-xs font-semibold text-[hsl(var(--color-muted-foreground))] mb-2 uppercase">
+                      Key Contributions
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {contributor.contributions.map((contrib, j) => (
+                        <Badge key={j} variant="secondary" className="text-xs">
+                          {contrib}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Social Links */}
+                  <div className="flex gap-3 pt-4 border-t border-[hsl(var(--color-border))]">
+                    <a 
+                      href={contributor.github} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-[hsl(var(--color-muted-foreground))] hover:text-[hsl(var(--color-primary))] transition-colors"
+                      title="GitHub"
+                    >
+                      <Github className="h-5 w-5" />
+                    </a>
+                    <a 
+                      href={contributor.linkedin} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-[hsl(var(--color-muted-foreground))] hover:text-[hsl(var(--color-primary))] transition-colors"
+                      title="LinkedIn"
+                    >
+                      <Linkedin className="h-5 w-5" />
+                    </a>
+                    <a 
+                      href={`mailto:${contributor.email}`}
+                      className="text-[hsl(var(--color-muted-foreground))] hover:text-[hsl(var(--color-primary))] transition-colors"
+                      title="Email"
+                    >
+                      <Mail className="h-5 w-5" />
+                    </a>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* GitHub Link */}
+            <div className="mt-8 p-4 rounded-lg bg-[hsl(var(--color-primary)/0.1)] border border-[hsl(var(--color-primary)/0.2)]">
+              <div className="flex items-center gap-3">
+                <Github className="h-5 w-5 text-[hsl(var(--color-primary))]" />
+                <div>
+                  <p className="font-semibold text-sm text-[hsl(var(--color-foreground))]">
+                    Open Source on GitHub
+                  </p>
+                  <p className="text-xs text-[hsl(var(--color-muted-foreground))]">
+                    View the source code and contribute:
+                  </p>
+                  <a 
+                    href="https://github.com/MasterOFSnippet/Chess-MinorProject" 
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[hsl(var(--color-primary))] hover:underline text-sm font-medium"
+                  >
+                    github.com/MasterOFSnippet/Chess-MinorProject →
+                  </a>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Footer */}
         <div className="text-center space-y-2 text-[hsl(var(--color-muted-foreground))]">
           <p className="text-sm">Built with ❤️ using MERN Stack</p>
-          <p className="text-xs opacity-80">© 2025 ChessMaster. All rights reserved.</p>
+          <p className="text-xs opacity-80">© 2025 ChessMaster. All rights reserved. | MIT License</p>
         </div>
 
       </div>

@@ -1,19 +1,3 @@
-/**
- * Game Page - PRODUCTION READY ✅
- * 
- * Changes from original:
- * 1. ✅ Proper Socket.IO connection with reconnection logic
- * 2. ✅ ChatPanel integration for human vs human games
- * 3. ✅ Bot thinking indicator (no interference with chat)
- * 4. ✅ Auto-refresh for human games (polling fallback)
- * 5. ✅ Abort button for <2 moves
- * 
- * Architecture:
- * - Socket.IO for real-time (chat + move notifications)
- * - REST API for game state (source of truth)
- * - Fallback polling for non-socket scenarios
- */
-
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Chess } from 'chess.js';
