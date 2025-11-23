@@ -108,34 +108,6 @@ const Home = () => {
   };
 
   // ============================================
-  // CREATE GAME HANDLER (with error handling)
-  // ============================================
-  const handleCreateGame = async () => {
-    if (gameMode === 'human' && !selectedOpponent) {
-      alert('⚠️ Please select an opponent');
-      return;
-    }
-
-    try {
-      setCreatingGame(true);
-      setError(null);
-
-      let response;
-      if (gameMode === 'bot') {
-        response = await gameAPI.createBotGame();
-      } else {
-        response = await gameAPI.createGame(selectedOpponent);
-      }
-      
-      navigate(`/game/${response.data.game._id}`);
-    } catch (error) {
-      console.error('❌ Error creating game:', error);
-      setError(error.response?.data?.message || 'Failed to create game. Please try again.');
-      setCreatingGame(false);
-    }
-  };
-
-  // ============================================
   // MODAL HANDLERS (useCallback for performance)
   // ============================================
   const handleOpenModal = useCallback(() => {
@@ -153,13 +125,40 @@ const Home = () => {
     setError(null);
   }, []);
 
-  const handleKeyDown = useCallback((e) => {
-    if (e.key === 'Escape') {
-      handleCloseModal();
-    } else if (e.key === 'Enter' && (gameMode === 'bot' || selectedOpponent)) {
-      handleCreateGame();
+  // HANDLE GAME CREATION (✅ MEMOIZED WITH CORRECT DEPS)
+  const handleCreateGame = useCallback(async () => {
+  if (gameMode === 'human' && !selectedOpponent) {
+    setError('⚠️ Please select an opponent');
+    return;
+  }
+
+  try {
+    setCreatingGame(true);
+    setError(null);
+
+    let response;
+    if (gameMode === 'bot') {
+      response = await gameAPI.createBotGame();
+    } else {
+      response = await gameAPI.createGame(selectedOpponent);
     }
-  }, [gameMode, selectedOpponent]);
+    
+    navigate(`/game/${response.data.game._id}`);
+  } catch (error) {
+    console.error('❌ Error creating game:', error);
+    setError(error.response?.data?.message || 'Failed to create game. Please try again.');
+    setCreatingGame(false);
+  }
+}, [gameMode, selectedOpponent, navigate]);
+
+  // HANDLE KEYBOARD SHORTCUTS (✅ UPDATED DEPS)
+  const handleKeyDown = useCallback((e) => {
+  if (e.key === 'Escape') {
+    handleCloseModal();
+  } else if (e.key === 'Enter' && (gameMode === 'bot' || selectedOpponent)) {
+    handleCreateGame();
+  }
+  }, [gameMode, selectedOpponent, handleCloseModal, handleCreateGame]); // ✅ BOTH functions included
 
   // Keyboard shortcut listener
   useEffect(() => {

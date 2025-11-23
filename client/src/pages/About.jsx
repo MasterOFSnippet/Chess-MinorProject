@@ -1,8 +1,12 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Gamepad2, Shield, Zap, Trophy, Bot, TrendingUp, Github, Linkedin, Mail } from 'lucide-react';
+import { useAuth } from '../context/AuthContext'; 
+import FeedbackBox from '../components/common/FeedbackBox'; 
 
 const About = () => {
+  const { user } = useAuth();
+
   const contributors = [
     {
       name: 'Arav Gautam',
@@ -143,7 +147,7 @@ const About = () => {
           </CardContent>
         </Card>
 
-        {/* ✅ CONTRIBUTORS SECTION */}
+        {/* Contributors Section */}
         <Card>
           <CardHeader>
             <CardTitle>Meet the Team</CardTitle>
@@ -156,7 +160,6 @@ const About = () => {
                   key={i}
                   className="p-6 rounded-lg border border-[hsl(var(--color-border))] bg-[hsl(var(--color-card)/0.5)] hover:bg-[hsl(var(--color-card)/0.8)] transition-all hover:shadow-lg"
                 >
-                  {/* Name & Role */}
                   <div className="mb-4">
                     <h3 className="text-xl font-bold text-[hsl(var(--color-foreground))] mb-1">
                       {contributor.name}
@@ -166,12 +169,10 @@ const About = () => {
                     </p>
                   </div>
 
-                  {/* Bio */}
                   <p className="text-sm text-[hsl(var(--color-muted-foreground))] mb-4">
                     {contributor.bio}
                   </p>
 
-                  {/* Contributions */}
                   <div className="mb-4">
                     <p className="text-xs font-semibold text-[hsl(var(--color-muted-foreground))] mb-2 uppercase">
                       Key Contributions
@@ -185,7 +186,6 @@ const About = () => {
                     </div>
                   </div>
 
-                  {/* Social Links */}
                   <div className="flex gap-3 pt-4 border-t border-[hsl(var(--color-border))]">
                     <a 
                       href={contributor.github} 
@@ -217,7 +217,6 @@ const About = () => {
               ))}
             </div>
 
-            {/* GitHub Link */}
             <div className="mt-8 p-4 rounded-lg bg-[hsl(var(--color-primary)/0.1)] border border-[hsl(var(--color-primary)/0.2)]">
               <div className="flex items-center gap-3">
                 <Github className="h-5 w-5 text-[hsl(var(--color-primary))]" />
@@ -241,6 +240,9 @@ const About = () => {
             </div>
           </CardContent>
         </Card>
+
+        {/* ✅ FEEDBACK BOX - NEW SECTION */}
+        <FeedbackBox user={user} />
 
         {/* Footer */}
         <div className="text-center space-y-2 text-[hsl(var(--color-muted-foreground))]">

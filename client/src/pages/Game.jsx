@@ -221,28 +221,62 @@ const Game = () => {
       chess.load(newGame.fen);
       setPosition(newGame.fen);
 
-      // Check game over conditions
+      // ✅ FIX: CHECK ALERT - Show to the player IN CHECK
+      if (response.data.gameStatus.isCheck && !response.data.gameStatus.isCheckmate) {
+        // After state updates, the opponent will see the alert
+        setTimeout(() => {
+          // The turn has switched, so currentTurn is now the player in check
+          const playerInCheck = newGame.currentTurn;
+          const myColor = getPlayerColor();
+          
+          // Only show alert if I'M the one in check
+          if (playerInCheck === myColor) {
+            alert('⚠️ You are in Check!');
+          }
+        }, 300);
+      }
+
+      // ✅ FIX: CHECKMATE WINNER DETECTION
       if (response.data.gameStatus.isCheckmate) {
         setTimeout(() => {
-          const winner = newGame.winner;
           let winnerName = 'Unknown';
           
           if (game.isBot) {
-            winnerName = winner && winner.toString() === user.id ? 'You' : 'Stockfish';
+            // Bot game: winner is whoever's turn it ISN'T (since turn switched after checkmate)
+            const myColor = getPlayerColor();
+            const winnerColor = newGame.currentTurn === 'white' ? 'black' : 'white';
+            winnerName = myColor === winnerColor ? 'You' : 'Stockfish';
           } else {
-            winnerName = newGame.winner?.username || 'Unknown';
+            // Human game: Get winner from populated player objects
+            const winnerId = newGame.winner?._id || newGame.winner;
+            
+            if (winnerId) {
+              // Check if it's the current user
+              if (winnerId.toString() === user.id) {
+                winnerName = 'You';
+              } else {
+                // Get winner's username from game.players
+                if (newGame.players.white?._id?.toString() === winnerId.toString()) {
+                  winnerName = newGame.players.white.username;
+                } else if (newGame.players.black?._id?.toString() === winnerId.toString()) {
+                  winnerName = newGame.players.black.username;
+                }
+              }
+            }
           }
           
           alert(`🏆 Checkmate! ${winnerName} wins!`);
           setTimeout(() => navigate('/'), 1500);
         }, 200);
-      } else if (response.data.gameStatus.isDraw) {
+      } 
+      // ============================================
+      // DRAW DETECTION
+      // ============================================
+      else if (response.data.gameStatus.isDraw) {
         setTimeout(() => {
           alert('🤝 Game ended in a draw!');
           setTimeout(() => navigate('/'), 1500);
         }, 200);
-      } else if (response.data.gameStatus.isCheck) {
-        setTimeout(() => alert('Check!'), 200);
       }
     } catch (error) {
       console.error('❌ Error making move:', error);

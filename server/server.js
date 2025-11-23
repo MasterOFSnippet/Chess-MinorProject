@@ -1,12 +1,3 @@
-/**
- * Express + Socket.IO Server
- * 
- * Architecture Pattern: Separation of Concerns
- * - Express handles HTTP (REST API)
- * - Socket.IO handles WebSocket (real-time)
- * - Both share the same server instance
- */
-
 const express = require('express');
 const http = require('http'); // ADDED: Need HTTP server for Socket.IO
 const { Server } = require('socket.io'); // ADDED
@@ -66,6 +57,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/game', require('./routes/game'));
 app.use('/api/users', require('./routes/user'));
 app.use('/api/messages', require('./routes/messages')); 
+app.use('/api/feedback', require('./routes/feedback'));
 
 // Health check
 app.get('/api/health', (req, res) => {
