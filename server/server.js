@@ -1,10 +1,10 @@
 const express = require('express');
 const http = require('http'); // ADDED: Need HTTP server for Socket.IO
-const { Server } = require('socket.io'); // ADDED
+const { Server } = require('socket.io'); 
 const dotenv = require('dotenv');
 const cors = require('cors');
 const connectDB = require('./config/db');
-const socketHandler = require('./socket/socketHandler'); // ADDED
+const socketHandler = require('./socket/socketHandler');
 
 // Load env vars
 dotenv.config();

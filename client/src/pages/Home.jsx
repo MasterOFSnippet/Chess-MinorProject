@@ -16,8 +16,111 @@ import {
   Search, 
   X, 
   Loader2,
+  ChevronUp,
+  ChevronDown,
   AlertCircle 
 } from 'lucide-react';
+
+const CollapsibleGamesSection = ({ games, getGameStatus, navigate, user }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [displayCount, setDisplayCount] = useState(5);
+
+  // Show only first 5 games initially, or all if expanded
+  const visibleGames = isExpanded ? games : games.slice(0, displayCount);
+  const hasMoreGames = games.length > displayCount;
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>Your Recent Games</CardTitle>
+            <CardDescription>
+              {games.length === 0 
+                ? 'No games yet' 
+                : `Showing ${visibleGames.length} of ${games.length} games`
+              }
+            </CardDescription>
+          </div>
+          
+          {hasMoreGames && (
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-[hsl(var(--color-muted))] transition-colors"
+            >
+              <span className="text-sm font-medium">
+                {isExpanded ? 'Show Less' : `Show All (${games.length})`}
+              </span>
+              {isExpanded ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+            </button>
+          )}
+        </div>
+      </CardHeader>
+
+      <CardContent>
+        {games.length === 0 ? (
+          <div className="text-center py-12">
+            <Gamepad2 className="h-16 w-16 mx-auto mb-4 text-[hsl(var(--color-muted-foreground))]" />
+            <p className="text-[hsl(var(--color-muted-foreground))]">
+              No games yet. Start your first match!
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
+            {visibleGames.map((game) => {
+              const status = getGameStatus(game);
+              return (
+                <div
+                  key={game._id}
+                  onClick={() => navigate(`/game/${game._id}`)}
+                  className="p-4 rounded-lg border cursor-pointer transition-all hover:shadow-md hover:scale-[1.01] border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] hover:border-[hsl(var(--color-primary)/0.5)]"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2 flex-wrap">
+                        <span className="font-semibold">
+                          ⚪ {game.players.white?.username || 'Stockfish'}
+                        </span>
+                        <span className="text-[hsl(var(--color-muted-foreground))]">
+                          vs
+                        </span>
+                        <span className="font-semibold">
+                          ⚫ {game.players.black?.username || 'Stockfish'}
+                        </span>
+                        {game.isBot && (
+                          <Badge variant="secondary" className="ml-2">
+                            <Bot className="h-3 w-3 mr-1" />
+                            AI
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 text-sm text-[hsl(var(--color-muted-foreground))] flex-wrap">
+                        <span>{new Date(game.startedAt).toLocaleDateString()}</span>
+                        <span>•</span>
+                        <span>{game.moves.length} moves</span>
+                        {game.status === 'completed' && game.result && (
+                          <>
+                            <span>•</span>
+                            <span className="font-medium">Result: {game.result}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <Badge variant={status.variant}>{status.text}</Badge>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
 
 const Home = () => {
   const { user } = useAuth();
@@ -293,67 +396,14 @@ const Home = () => {
             Start New Game
           </Button>
         </div>
-
-        {/* ============================================
-            RECENT GAMES
-            ============================================ */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Your Recent Games</CardTitle>
-            <CardDescription>Click a game to view or continue</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {games.length === 0 ? (
-              <div className="text-center py-12">
-                <Gamepad2 className="h-16 w-16 mx-auto mb-4 text-[hsl(var(--color-muted-foreground))]" />
-                <p className="text-[hsl(var(--color-muted-foreground))]">
-                  No games yet. Start your first match!
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {games.map((game) => {
-                  const status = getGameStatus(game);
-                  return (
-                    <div
-                      key={game._id}
-                      onClick={() => navigate(`/game/${game._id}`)}
-                      className="p-4 rounded-lg border cursor-pointer transition-all hover:shadow-md hover:scale-[1.01] border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))]"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <span className="font-semibold">
-                              ⚪ {game.players.white?.username || 'Stockfish'}
-                            </span>
-                            <span className="text-[hsl(var(--color-muted-foreground))]">
-                              vs
-                            </span>
-                            <span className="font-semibold">
-                              ⚫ {game.players.black?.username || 'Stockfish'}
-                            </span>
-                            {game.isBot && (
-                              <Badge variant="secondary" className="ml-2">
-                                <Bot className="h-3 w-3 mr-1" />
-                                AI
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3 text-sm text-[hsl(var(--color-muted-foreground))]">
-                            <span>{new Date(game.startedAt).toLocaleDateString()}</span>
-                            <span>•</span>
-                            <span>{game.moves.length} moves</span>
-                          </div>
-                        </div>
-                        <Badge variant={status.variant}>{status.text}</Badge>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        
+        {/* Collapsible Recent Game Section */}
+        <CollapsibleGamesSection 
+          games={games}
+          getGameStatus={getGameStatus}
+          navigate={navigate}
+          user={user}
+        />
       </div>
 
       {/* ============================================
