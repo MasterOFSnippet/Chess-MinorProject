@@ -65,7 +65,48 @@ const gameSchema = new mongoose.Schema({
   endedAt: {
     type: Date,
     default: null
+  },
+  lastMoveTime: {
+    type: Date,
+    default: Date.now,
+    index: true // Index for efficient timeout queries
+  },
+  timeoutWarnings: {
+    white: {
+      type: Boolean,
+      default: false
+    },
+    black: {
+      type: Boolean,
+      default: false
+    }
+  },
+  abandonedBy: {
+    type: String,
+    enum: ['white', 'black', null],
+    default: null
   }
 });
+
+// ADDED METHOD TO CHECK IF GAME SHOULD TIMEOUT
+gameSchema.methods.shouldTimeout = function(timeoutDuration = 90000) {
+  // 90000ms = 1.5 minutes
+  if (this.status !== 'active') return false;
+  
+  const timeSinceLastMove = Date.now() - this.lastMoveTime;
+  return timeSinceLastMove >= timeoutDuration;
+};
+
+// ADDED METHOD TO CHECK IF WARNING SHOULD BE SENT
+gameSchema.methods.shouldWarn = function(warningTime = 60000) {
+  // Warn at 60 seconds (30 seconds before timeout)
+  if (this.status !== 'active') return false;
+  
+  const timeSinceLastMove = Date.now() - this.lastMoveTime;
+  const currentPlayer = this.currentTurn;
+  const hasBeenWarned = this.timeoutWarnings[currentPlayer];
+  
+  return timeSinceLastMove >= warningTime && !hasBeenWarned;
+};
 
 module.exports = mongoose.model('Game', gameSchema);

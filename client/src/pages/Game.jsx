@@ -9,7 +9,7 @@ import ChatPanel from '../components/game/ChatPanel'; // ✅ ADDED
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { Trophy, Clock, Target, Flag, Bot, User, AlertCircle, XCircle, Loader2, Wifi, WifiOff } from 'lucide-react';
+import { Trophy, Clock, Target, Flag, Bot, User, AlertCircle, AlertTriangle, XCircle, Loader2, Wifi, WifiOff } from 'lucide-react';
 
 const Game = () => {
   const { gameId } = useParams();
@@ -23,6 +23,9 @@ const Game = () => {
   const [error, setError] = useState(null);
   const [socketConnected, setSocketConnected] = useState(false);
   const [botThinking, setBotThinking] = useState(false);
+  // ADDED NEW STATE FOR TIMEOUT
+  const [timeoutWarning, setTimeoutWarning] = useState(null);
+  const [remainingTime, setRemainingTime] = useState(null);
 
   // ============================================
   // SOCKET.IO INITIALIZATION
@@ -118,6 +121,9 @@ const Game = () => {
         if (playerId !== user.id) {
           console.log('♟️ Opponent moved, refreshing game...');
           fetchGame();
+          // Cleared timeout warning when opponent moves
+          setTimeoutWarning(null);
+          setRemainingTime(null);
         }
       });
 
@@ -128,10 +134,68 @@ const Game = () => {
         chess.load(gameData.fen);
         setPosition(gameData.fen);
       });
+      // NEW: Listen for timeout warnings
+      socketService.getSocket().on('game:timeout-warning', (data) => {
+        console.log('⚠️ Timeout warning received:', data);
+        
+        const myColor = getPlayerColor();
+        if (data.currentPlayer === myColor) {
+          setTimeoutWarning(data.message);
+          setRemainingTime(data.remainingTime);
+          
+          // Show browser notification if permitted
+          if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('⚠️ Your turn!', {
+              body: `You have ${Math.ceil(data.remainingTime / 1000)} seconds to move!`,
+              icon: '/chess-pawn.svg'
+            });
+          }
+        }
+      });
+
+      // ✅ NEW: Listen for timeout events
+      socketService.getSocket().on('game:timeout', (data) => {
+        console.log('⏰ Game timed out:', data);
+        
+        setGame(data.game);
+        
+        setTimeout(() => {
+          alert(data.message);
+          navigate('/');
+        }, 1000);
+      });
+
     } catch (err) {
       console.error('Failed to setup socket listeners:', err);
     }
   };
+  // CLEANUP TIMEOUT LISTENERS
+  useEffect(() => {
+    return () => {
+      const socket = socketService.getSocket();
+      if (socket) {
+        socket.off('game:timeout-warning');
+        socket.off('game:timeout');
+      }
+    };
+  }, []);
+
+  // COUNTDOWN TIMER (additional and optional awesome UX)
+  useEffect(() => {
+    if (remainingTime && timeoutWarning) {
+      const interval = setInterval(() => {
+        setRemainingTime(prev => {
+          if (prev <= 1000) {
+            clearInterval(interval);
+            return 0;
+          }
+          return prev - 1000;
+        });
+      }, 1000);
+
+      return () => clearInterval(interval);
+    }
+  }, [timeoutWarning, remainingTime]);
 
   // ============================================
   // FETCH GAME STATE (REST API = Source of Truth)
@@ -359,6 +423,25 @@ const Game = () => {
   return (
     <div className="min-h-screen py-8 px-4 text-[hsl(var(--color-foreground))] bg-[hsl(var(--color-background))]">
       <div className="max-w-7xl mx-auto space-y-6">
+        {/* ✅ TIMEOUT WARNING BANNER */}
+        {timeoutWarning && remainingTime > 0 && (
+          <div className="bg-red-500/10 border-2 border-red-500 rounded-lg p-4 animate-pulse">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="h-6 w-6 text-red-500" />
+              <div className="flex-1">
+                <p className="text-red-500 font-bold text-lg">
+                  ⏰ TIME WARNING!
+                </p>
+                <p className="text-red-400 text-sm">
+                  You have {Math.ceil(remainingTime / 1000)} seconds to make a move or you'll lose by timeout!
+                </p>
+              </div>
+              <div className="text-3xl font-bold text-red-500 tabular-nums">
+                {Math.ceil(remainingTime / 1000)}s
+              </div>
+            </div>
+          </div>
+        )}
         {/* Connection Status */}
         <div className="flex justify-between items-center flex-wrap gap-2">
           <div className="flex gap-2">

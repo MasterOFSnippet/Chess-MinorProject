@@ -5,6 +5,7 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const connectDB = require('./config/db');
 const socketHandler = require('./socket/socketHandler');
+const TimeoutService = require('./services/timeoutService');
 
 // Load env vars
 dotenv.config();
@@ -42,6 +43,10 @@ app.set('io', io);
 // Initialize Socket.IO event handlers
 socketHandler(io);
 console.log('✅ Socket.IO initialized');
+
+// INITIALIZE TIMEOUT SERVICE
+const timeoutService = new TimeoutService(io);
+timeoutService.start();
 
 // EXPRESS MIDDLEWARE
 app.use(express.json());
@@ -91,4 +96,22 @@ const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`🚀 Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
   console.log(`🔌 Socket.IO ready for connections`);
+});
+
+// GRACEFUL SHUTDOWN
+process.on('SIGTERM', () => {
+  console.log('SIGTERM signal received: closing HTTP server');
+  timeoutService.stop();
+  server.close(() => {
+    console.log('HTTP server closed');
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT signal received: closing HTTP server');
+  timeoutService.stop();
+  server.close(() => {
+    console.log('HTTP server closed');
+    process.exit(0);
+  });
 });

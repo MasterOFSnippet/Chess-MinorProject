@@ -126,6 +126,10 @@ exports.makeBotMove = async (req, res) => {
     game.fen = chess.fen();
     game.pgn = chess.pgn();
     game.currentTurn = game.currentTurn === 'white' ? 'black' : 'white';
+    // RESET TIMER AFTER USER MOVE
+    game.lastMoveTime = new Date();
+    game.timeoutWarnings.white = false;
+    game.timeoutWarnings.black = false;
 
     // Check if game is over after user move
     if (chess.isGameOver()) {
@@ -180,7 +184,7 @@ exports.makeBotMove = async (req, res) => {
     console.log(`🤔 Bot thinking for ${Math.round(thinkingTime)}ms...`);
     await new Promise(resolve => setTimeout(resolve, thinkingTime));
 
-    // Get bot's move
+    // Bot's move logic...
     const botMoveData = simpleAI.getSmartMove(game.fen);
     
     console.log('🤖 Bot selected move:', botMoveData);
@@ -228,6 +232,10 @@ exports.makeBotMove = async (req, res) => {
       game.fen = chess.fen();
       game.pgn = chess.pgn();
       game.currentTurn = game.currentTurn === 'white' ? 'black' : 'white';
+      // RESET TIMER AFTER BOT MOVE TOO
+      game.lastMoveTime = new Date();
+      game.timeoutWarnings.white = false;
+      game.timeoutWarnings.black = false;
 
       if (chess.isGameOver()) {
         game.status = 'completed';
@@ -424,6 +432,10 @@ exports.makeMove = async (req, res) => {
     game.fen = chess.fen();
     game.pgn = chess.pgn();
     game.currentTurn = game.currentTurn === 'white' ? 'black' : 'white';
+    // CRITICAL: Reset timeout timer and warnings
+    game.lastMoveTime = new Date();
+    game.timeoutWarnings.white = false;
+    game.timeoutWarnings.black = false;
 
     if (chess.isGameOver()) {
       game.status = 'completed';

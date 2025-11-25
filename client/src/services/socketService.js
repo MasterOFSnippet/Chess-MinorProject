@@ -16,6 +16,32 @@ class SocketService {
     this.connected = false;
   }
 
+  // ADDED TIMEOUT EVENT LISTENERS
+  /**
+   * Listen for timeout warnings
+   */
+  onTimeoutWarning(callback) {
+    if (!this.socket) return;
+    this.socket.on('game:timeout-warning', callback);
+  }
+
+  /**
+   * Listen for game timeout
+   */
+  onGameTimeout(callback) {
+    if (!this.socket) return;
+    this.socket.on('game:timeout', callback);
+  }
+
+  /**
+   * Remove timeout listeners
+   */
+  removeTimeoutListeners() {
+    if (!this.socket) return;
+    this.socket.off('game:timeout-warning');
+    this.socket.off('game:timeout');
+  }
+
   /**
    * Initialize socket connection
    * @param {string} token - JWT auth token
