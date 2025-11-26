@@ -178,6 +178,9 @@ exports.makeBotMove = async (req, res) => {
     }
 
     await game.save();
+    // NEW: Notify clients to clear warning UI
+    const io = req.app.get('io');
+    io.to(game._id.toString()).emit('game:timeout-warning-cleared');
 
     // ✅ Artificial thinking delay (realistic bot "thinking" time)
     const thinkingTime = 1500 + Math.random() * 1000; // 1.5-2.5 seconds
@@ -187,7 +190,7 @@ exports.makeBotMove = async (req, res) => {
     // Bot's move logic...
     const botMoveData = simpleAI.getSmartMove(game.fen);
     
-    console.log('🤖 Bot selected move:', botMoveData);
+    // console.log('🤖 Bot selected move:', botMoveData);
     
     if (!botMoveData) {
       console.log('⚠️ No valid bot move available');
@@ -491,6 +494,9 @@ exports.makeMove = async (req, res) => {
     }
 
     await game.save();
+    // NEW: Notify clients to clear warning UI
+    const io = req.app.get('io');
+    io.to(game._id.toString()).emit('game:timeout-warning-cleared');
     await game.populate('players.white players.black', 'username rating');
 
     res.status(200).json({

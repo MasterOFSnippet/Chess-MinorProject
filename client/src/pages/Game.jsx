@@ -11,6 +11,35 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Trophy, Clock, Target, Flag, Bot, User, AlertCircle, AlertTriangle, XCircle, Loader2, Wifi, WifiOff } from 'lucide-react';
 
+const GameOverModal = ({ show, winner, reason, onClose }) => {
+  if (!show) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
+      <Card className="max-w-md w-full mx-4 border-2 border-[hsl(var(--color-primary))]">
+        <CardHeader>
+          <CardTitle className="text-center text-3xl">
+            {winner === 'You' ? '🏆 Victory!' : winner === 'Draw' ? '🤝 Draw!' : '💔 Defeat'}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="text-center space-y-2">
+            <p className="text-xl font-semibold">
+              {winner === 'Draw' ? 'Game ended in a draw' : `${winner} wins!`}
+            </p>
+            <p className="text-sm text-[hsl(var(--color-muted-foreground))]">
+              {reason}
+            </p>
+          </div>
+          <Button onClick={onClose} className="w-full" size="lg">
+            Return to Home
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
 const Game = () => {
   const { gameId } = useParams();
   const navigate = useNavigate();
@@ -26,6 +55,11 @@ const Game = () => {
   // ADDED NEW STATE FOR TIMEOUT
   const [timeoutWarning, setTimeoutWarning] = useState(null);
   const [remainingTime, setRemainingTime] = useState(null);
+  const [gameOverModal, setGameOverModal] = useState({
+    show: false,
+    winner: '',
+    reason: ''
+  });
 
   // ============================================
   // SOCKET.IO INITIALIZATION
@@ -153,16 +187,27 @@ const Game = () => {
         }
       });
 
-      // ✅ NEW: Listen for timeout events
+      // NEW: Listen for timeout events
       socketService.getSocket().on('game:timeout', (data) => {
         console.log('⏰ Game timed out:', data);
         
-        setGame(data.game);
+        const myColor = getPlayerColor();
+        const winner = data.winner === myColor ? 'You' : 
+                      data.winner === 'white' ? game.players.white?.username :
+                      game.players.black?.username;
         
-        setTimeout(() => {
-          alert(data.message);
-          navigate('/');
-        }, 1000);
+        setGameOverModal({
+          show: true,
+          winner,
+          reason: data.message
+        });
+      });
+
+      // Add listener in setupSocketListeners()
+      socketService.getSocket().on('game:timeout-warning-cleared', () => {
+        console.log('✅ Timeout warning cleared by server');
+        setTimeoutWarning(null);
+        setRemainingTime(null);
       });
 
     } catch (err) {
@@ -176,6 +221,7 @@ const Game = () => {
       if (socket) {
         socket.off('game:timeout-warning');
         socket.off('game:timeout');
+        socket.off('game:timeout-warning-cleared');
       }
     };
   }, []);
@@ -655,6 +701,12 @@ const Game = () => {
             )}
           </div>
         </div>
+        <GameOverModal 
+          show={gameOverModal.show}
+          winner={gameOverModal.winner}
+          reason={gameOverModal.reason}
+          onClose={() => navigate('/')}
+        />
       </div>
     </div>
   );

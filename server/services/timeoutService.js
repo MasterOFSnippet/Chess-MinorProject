@@ -77,6 +77,12 @@ class TimeoutService {
     }
   }
 
+  // Added this helper method to TimeoutService class
+  clearWarningsForGame(gameId) {
+    this.io.to(gameId.toString()).emit('game:timeout-warning-cleared');
+    console.log(`✅ Timeout warnings cleared for game ${gameId}`);
+  }
+
   /**
    * Send warning to inactive player
    */
