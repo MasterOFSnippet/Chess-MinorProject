@@ -6,7 +6,6 @@ const gameSchema = new mongoose.Schema({
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: function() {
-        // Only required if it's not a bot game
         return !this.isBot;
       }
     },
@@ -14,7 +13,6 @@ const gameSchema = new mongoose.Schema({
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: function() {
-        // Only required if it's not a bot game
         return !this.isBot;
       }
     }
@@ -69,7 +67,7 @@ const gameSchema = new mongoose.Schema({
   lastMoveTime: {
     type: Date,
     default: Date.now,
-    index: true // Index for efficient timeout queries
+    index: true 
   },
   timeoutWarnings: {
     white: {
@@ -88,18 +86,36 @@ const gameSchema = new mongoose.Schema({
   }
 });
 
-// ADDED METHOD TO CHECK IF GAME SHOULD TIMEOUT
+// ============================================
+//  PRODUCTION-READY INDEXES
+// ============================================
+
+// 1. Query: Find active games by player
+// Used by: isUserBusy() in gameController.js
+gameSchema.index({ status: 1, 'players.white': 1 });
+gameSchema.index({ status: 1, 'players.black': 1 });
+
+// 2. Query: Find all games for a user (getMyGames)
+gameSchema.index({ 'players.white': 1, startedAt: -1 });
+gameSchema.index({ 'players.black': 1, startedAt: -1 });
+
+// 3. Query: Timeout checker (checks lastMoveTime)
+gameSchema.index({ status: 1, lastMoveTime: 1 });
+
+// 4. General status queries
+gameSchema.index({ status: 1, startedAt: -1 });
+
+// ============================================
+// METHODS
+// ============================================
 gameSchema.methods.shouldTimeout = function(timeoutDuration = 90000) {
-  // 90000ms = 1.5 minutes
   if (this.status !== 'active') return false;
   
   const timeSinceLastMove = Date.now() - this.lastMoveTime;
   return timeSinceLastMove >= timeoutDuration;
 };
 
-// ADDED METHOD TO CHECK IF WARNING SHOULD BE SENT
 gameSchema.methods.shouldWarn = function(warningTime = 60000) {
-  // Warn at 60 seconds (30 seconds before timeout)
   if (this.status !== 'active') return false;
   
   const timeSinceLastMove = Date.now() - this.lastMoveTime;

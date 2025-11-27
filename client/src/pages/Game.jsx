@@ -5,26 +5,61 @@ import { gameAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import socketService from '../services/socketService';
 import ChessBoard from '../components/ChessBoard/ChessBoard';
-import ChatPanel from '../components/game/ChatPanel'; // ✅ ADDED
+import ChatPanel from '../components/game/ChatPanel';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Trophy, Clock, Target, Flag, Bot, User, AlertCircle, AlertTriangle, XCircle, Loader2, Wifi, WifiOff } from 'lucide-react';
 
+// ============================================
+// 🎯 ENHANCED GAME OVER MODAL
+// ============================================
 const GameOverModal = ({ show, winner, reason, onClose }) => {
   if (!show) return null;
 
+  // Determine modal styling based on outcome
+  const getModalStyle = () => {
+    if (winner === 'You') {
+      return {
+        emoji: '🏆',
+        title: 'Victory!',
+        bgColor: 'bg-gradient-to-br from-yellow-500/20 to-green-500/20',
+        borderColor: 'border-yellow-500',
+        textColor: 'text-yellow-500'
+      };
+    } else if (winner === 'Draw') {
+      return {
+        emoji: '🤝',
+        title: 'Draw!',
+        bgColor: 'bg-gradient-to-br from-blue-500/20 to-purple-500/20',
+        borderColor: 'border-blue-500',
+        textColor: 'text-blue-500'
+      };
+    } else {
+      return {
+        emoji: '💔',
+        title: 'Defeat',
+        bgColor: 'bg-gradient-to-br from-red-500/20 to-pink-500/20',
+        borderColor: 'border-red-500',
+        textColor: 'text-red-500'
+      };
+    }
+  };
+
+  const style = getModalStyle();
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
-      <Card className="max-w-md w-full mx-4 border-2 border-[hsl(var(--color-primary))]">
+      <Card className={`max-w-md w-full mx-4 border-2 ${style.borderColor} ${style.bgColor}`}>
         <CardHeader>
-          <CardTitle className="text-center text-3xl">
-            {winner === 'You' ? '🏆 Victory!' : winner === 'Draw' ? '🤝 Draw!' : '💔 Defeat'}
+          <CardTitle className="text-center text-4xl">
+            <div className="mb-4 text-6xl animate-bounce">{style.emoji}</div>
+            <div className={style.textColor}>{style.title}</div>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="text-center space-y-2">
-            <p className="text-xl font-semibold">
+            <p className="text-xl font-semibold text-[hsl(var(--color-foreground))]">
               {winner === 'Draw' ? 'Game ended in a draw' : `${winner} wins!`}
             </p>
             <p className="text-sm text-[hsl(var(--color-muted-foreground))]">
@@ -52,9 +87,10 @@ const Game = () => {
   const [error, setError] = useState(null);
   const [socketConnected, setSocketConnected] = useState(false);
   const [botThinking, setBotThinking] = useState(false);
-  // ADDED NEW STATE FOR TIMEOUT
   const [timeoutWarning, setTimeoutWarning] = useState(null);
   const [remainingTime, setRemainingTime] = useState(null);
+  
+  // ✅ CENTRALIZED GAME OVER STATE
   const [gameOverModal, setGameOverModal] = useState({
     show: false,
     winner: '',
@@ -62,8 +98,18 @@ const Game = () => {
   });
 
   // ============================================
-  // SOCKET.IO INITIALIZATION
+  // 🎯 UNIFIED GAME OVER HANDLER
   // ============================================
+  const showGameOverModal = (winner, reason) => {
+    console.log('🏁 Game Over:', winner, reason);
+    setGameOverModal({
+      show: true,
+      winner,
+      reason
+    });
+  };
+
+  // Socket initialization (same as before)
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -73,7 +119,6 @@ const Game = () => {
 
     try {
       if (!socketService.isConnected()) {
-        console.log('🔌 Initializing Socket.IO...');
         socketService.connect(token);
       }
 
@@ -82,12 +127,10 @@ const Game = () => {
         setSocketConnected(socket.connected);
         
         socket.on('connect', () => {
-          console.log('✅ Socket connected');
           setSocketConnected(true);
         });
         
         socket.on('disconnect', () => {
-          console.log('❌ Socket disconnected');
           setSocketConnected(false);
         });
       }
@@ -104,9 +147,7 @@ const Game = () => {
     };
   }, [navigate]);
 
-  // ============================================
-  // LOAD GAME & JOIN SOCKET ROOM
-  // ============================================
+  // Load game & join socket room
   useEffect(() => {
     if (gameId) {
       fetchGame();
@@ -121,15 +162,13 @@ const Game = () => {
         }
       }
 
-      // Polling fallback for human games (in case socket drops)
       let pollInterval;
       if (game && !game.isBot && game.status === 'active') {
         pollInterval = setInterval(() => {
           if (!socketConnected) {
-            console.log('📡 Polling for game updates (socket disconnected)');
             fetchGame();
           }
-        }, 5000); // Poll every 5 seconds if socket is down
+        }, 5000);
       }
 
       return () => {
@@ -145,39 +184,49 @@ const Game = () => {
     }
   }, [gameId, socketConnected, game?.isBot]);
 
-  // ============================================
-  // SOCKET EVENT HANDLERS
-  // ============================================
+  // Socket event handlers
   const setupSocketListeners = () => {
     try {
-      // Listen for opponent moves
       socketService.onMoveMade(({ playerId }) => {
         if (playerId !== user.id) {
-          console.log('♟️ Opponent moved, refreshing game...');
           fetchGame();
-          // Cleared timeout warning when opponent moves
           setTimeoutWarning(null);
           setRemainingTime(null);
         }
       });
 
-      // Listen for game state updates (from REST API broadcasts)
       socketService.onGameStateUpdate((gameData) => {
-        console.log('📥 Game state update received');
         setGame(gameData);
         chess.load(gameData.fen);
         setPosition(gameData.fen);
       });
-      // NEW: Listen for timeout warnings
-      socketService.getSocket().on('game:timeout-warning', (data) => {
-        console.log('⚠️ Timeout warning received:', data);
+
+      // ✅ TIMEOUT HANDLER - USE MODAL
+      socketService.getSocket().on('game:timeout', (data) => {
+        console.log('⏰ Game timed out:', data);
         
+        const myColor = getPlayerColor();
+        let winner;
+        
+        if (data.winner === myColor) {
+          winner = 'You';
+        } else if (game.isBot) {
+          winner = 'Stockfish';
+        } else {
+          winner = data.winner === 'white' 
+            ? game.players.white?.username 
+            : game.players.black?.username;
+        }
+        
+        showGameOverModal(winner, data.message);
+      });
+
+      socketService.getSocket().on('game:timeout-warning', (data) => {
         const myColor = getPlayerColor();
         if (data.currentPlayer === myColor) {
           setTimeoutWarning(data.message);
           setRemainingTime(data.remainingTime);
           
-          // Show browser notification if permitted
           if ('Notification' in window && Notification.permission === 'granted') {
             new Notification('⚠️ Your turn!', {
               body: `You have ${Math.ceil(data.remainingTime / 1000)} seconds to move!`,
@@ -187,25 +236,7 @@ const Game = () => {
         }
       });
 
-      // NEW: Listen for timeout events
-      socketService.getSocket().on('game:timeout', (data) => {
-        console.log('⏰ Game timed out:', data);
-        
-        const myColor = getPlayerColor();
-        const winner = data.winner === myColor ? 'You' : 
-                      data.winner === 'white' ? game.players.white?.username :
-                      game.players.black?.username;
-        
-        setGameOverModal({
-          show: true,
-          winner,
-          reason: data.message
-        });
-      });
-
-      // Add listener in setupSocketListeners()
       socketService.getSocket().on('game:timeout-warning-cleared', () => {
-        console.log('✅ Timeout warning cleared by server');
         setTimeoutWarning(null);
         setRemainingTime(null);
       });
@@ -214,7 +245,8 @@ const Game = () => {
       console.error('Failed to setup socket listeners:', err);
     }
   };
-  // CLEANUP TIMEOUT LISTENERS
+
+  // Cleanup timeout listeners
   useEffect(() => {
     return () => {
       const socket = socketService.getSocket();
@@ -226,7 +258,7 @@ const Game = () => {
     };
   }, []);
 
-  // COUNTDOWN TIMER (additional and optional awesome UX)
+  // Countdown timer
   useEffect(() => {
     if (remainingTime && timeoutWarning) {
       const interval = setInterval(() => {
@@ -243,9 +275,6 @@ const Game = () => {
     }
   }, [timeoutWarning, remainingTime]);
 
-  // ============================================
-  // FETCH GAME STATE (REST API = Source of Truth)
-  // ============================================
   const fetchGame = async () => {
     try {
       setError(null);
@@ -267,9 +296,6 @@ const Game = () => {
     }
   };
 
-  // ============================================
-  // GAME LOGIC
-  // ============================================
   const isMyTurn = () => {
     if (!game || !user) return false;
 
@@ -291,25 +317,20 @@ const Game = () => {
   };
 
   // ============================================
-  // HANDLE MOVE
+  // 🎯 HANDLE MOVE - WITH MODAL INTEGRATION
   // ============================================
   const handleMove = async (from, to) => {
     const move = { from, to, promotion: 'q' };
     
-    console.log('🎯 Attempting move:', move);
-
-    // Client-side validation
     const testChess = new Chess(position);
     const testMove = testChess.move(move);
     
     if (!testMove) {
       console.error('❌ Invalid move locally:', move);
-      alert('Invalid move!');
-      return;
+      return; // Silent fail for better UX
     }
 
     try {
-      // Show bot thinking indicator
       if (game.isBot) {
         setBotThinking(true);
       }
@@ -320,7 +341,6 @@ const Game = () => {
       } else {
         response = await gameAPI.makeMove(gameId, move);
         
-        // ✅ Notify other players via Socket.IO
         if (socketConnected) {
           socketService.notifyMove(gameId, move);
         }
@@ -331,41 +351,36 @@ const Game = () => {
       chess.load(newGame.fen);
       setPosition(newGame.fen);
 
-      // ✅ FIX: CHECK ALERT - Show to the player IN CHECK
+      // ✅ CHECK ALERT - Only for non-checkmate checks
       if (response.data.gameStatus.isCheck && !response.data.gameStatus.isCheckmate) {
-        // After state updates, the opponent will see the alert
         setTimeout(() => {
-          // The turn has switched, so currentTurn is now the player in check
           const playerInCheck = newGame.currentTurn;
           const myColor = getPlayerColor();
           
-          // Only show alert if I'M the one in check
           if (playerInCheck === myColor) {
-            alert('⚠️ You are in Check!');
+            // Optional: Could use a toast notification instead
+            const audio = new Audio('/check-sound.mp3'); // Add sound effect
+            audio.play().catch(() => {}); // Silent fail if no sound
           }
         }, 300);
       }
 
-      // ✅ FIX: CHECKMATE WINNER DETECTION
+      // ✅ CHECKMATE - USE MODAL INSTEAD OF ALERT
       if (response.data.gameStatus.isCheckmate) {
         setTimeout(() => {
           let winnerName = 'Unknown';
           
           if (game.isBot) {
-            // Bot game: winner is whoever's turn it ISN'T (since turn switched after checkmate)
             const myColor = getPlayerColor();
             const winnerColor = newGame.currentTurn === 'white' ? 'black' : 'white';
             winnerName = myColor === winnerColor ? 'You' : 'Stockfish';
           } else {
-            // Human game: Get winner from populated player objects
             const winnerId = newGame.winner?._id || newGame.winner;
             
             if (winnerId) {
-              // Check if it's the current user
               if (winnerId.toString() === user.id) {
                 winnerName = 'You';
               } else {
-                // Get winner's username from game.players
                 if (newGame.players.white?._id?.toString() === winnerId.toString()) {
                   winnerName = newGame.players.white.username;
                 } else if (newGame.players.black?._id?.toString() === winnerId.toString()) {
@@ -375,22 +390,25 @@ const Game = () => {
             }
           }
           
-          alert(`🏆 Checkmate! ${winnerName} wins!`);
-          setTimeout(() => navigate('/'), 1500);
-        }, 200);
+          // ✅ SHOW MODAL INSTEAD OF ALERT
+          showGameOverModal(winnerName, 'Checkmate! Game over.');
+        }, 500);
       } 
-      // ============================================
-      // DRAW DETECTION
-      // ============================================
+      // ✅ DRAW - USE MODAL
       else if (response.data.gameStatus.isDraw) {
         setTimeout(() => {
-          alert('🤝 Game ended in a draw!');
-          setTimeout(() => navigate('/'), 1500);
-        }, 200);
+          let drawReason = 'Stalemate';
+          if (chess.isInsufficientMaterial()) drawReason = 'Insufficient material';
+          if (chess.isThreefoldRepetition()) drawReason = 'Threefold repetition';
+          
+          showGameOverModal('Draw', drawReason);
+        }, 500);
       }
     } catch (error) {
       console.error('❌ Error making move:', error);
-      alert(error.response?.data?.message || 'Invalid move');
+      // Show error as toast/snackbar instead of alert
+      setError(error.response?.data?.message || 'Invalid move');
+      setTimeout(() => setError(null), 3000);
       fetchGame();
     } finally {
       setBotThinking(false);
@@ -398,38 +416,50 @@ const Game = () => {
   };
 
   // ============================================
-  // ABORT GAME
-  // ============================================
-  const handleAbort = async () => {
-    if (!window.confirm('Abort this game? (No rating change)')) return;
-    try {
-      await gameAPI.abortGame(gameId);
-      alert('Game aborted');
-      navigate('/');
-    } catch (error) {
-      console.error('❌ Error aborting:', error);
-      alert(error.response?.data?.message || 'Cannot abort game');
-    }
-  };
-
-  // ============================================
-  // RESIGN GAME
+  // 🎯 RESIGN - USE MODAL INSTEAD OF ALERT
   // ============================================
   const handleResign = async () => {
     if (!window.confirm('Are you sure you want to resign?')) return;
+    
     try {
       await gameAPI.resignGame(gameId);
-      alert('You have resigned');
-      navigate('/');
+      
+      // Determine opponent's name
+      let opponentName;
+      if (game.isBot) {
+        opponentName = 'Stockfish';
+      } else {
+        const myColor = getPlayerColor();
+        opponentName = myColor === 'white' 
+          ? game.players.black?.username 
+          : game.players.white?.username;
+      }
+      
+      // ✅ SHOW MODAL INSTEAD OF ALERT + NAVIGATE
+      showGameOverModal(opponentName, 'You resigned from the game.');
     } catch (error) {
       console.error('❌ Error resigning:', error);
+      setError('Failed to resign. Please try again.');
     }
   };
 
   // ============================================
-  // ERROR STATE
+  // 🎯 ABORT - USE MODAL
   // ============================================
-  if (error) {
+  const handleAbort = async () => {
+    if (!window.confirm('Abort this game? (No rating change)')) return;
+    
+    try {
+      await gameAPI.abortGame(gameId);
+      showGameOverModal('Draw', 'Game aborted (no rating change).');
+    } catch (error) {
+      console.error('❌ Error aborting:', error);
+      setError(error.response?.data?.message || 'Cannot abort game');
+    }
+  };
+
+  // Error state
+  if (error && !gameOverModal.show) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <Card className="max-w-md">
@@ -448,9 +478,7 @@ const Game = () => {
     );
   }
 
-  // ============================================
-  // LOADING STATE
-  // ============================================
+  // Loading state
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -469,7 +497,8 @@ const Game = () => {
   return (
     <div className="min-h-screen py-8 px-4 text-[hsl(var(--color-foreground))] bg-[hsl(var(--color-background))]">
       <div className="max-w-7xl mx-auto space-y-6">
-        {/* ✅ TIMEOUT WARNING BANNER */}
+        
+        {/* Timeout Warning Banner */}
         {timeoutWarning && remainingTime > 0 && (
           <div className="bg-red-500/10 border-2 border-red-500 rounded-lg p-4 animate-pulse">
             <div className="flex items-center gap-3">
@@ -479,7 +508,7 @@ const Game = () => {
                   ⏰ TIME WARNING!
                 </p>
                 <p className="text-red-400 text-sm">
-                  You have {Math.ceil(remainingTime / 1000)} seconds to make a move or you'll lose by timeout!
+                  You have {Math.ceil(remainingTime / 1000)} seconds to make a move!
                 </p>
               </div>
               <div className="text-3xl font-bold text-red-500 tabular-nums">
@@ -488,6 +517,7 @@ const Game = () => {
             </div>
           </div>
         )}
+
         {/* Connection Status */}
         <div className="flex justify-between items-center flex-wrap gap-2">
           <div className="flex gap-2">
@@ -653,7 +683,7 @@ const Game = () => {
                 {canAbort ? (
                   <Button onClick={handleAbort} variant="outline" className="w-full">
                     <XCircle className="mr-2 h-4 w-4" />
-                    Abort Game (No Rating Change)
+                    Abort Game
                   </Button>
                 ) : (
                   <Button onClick={handleResign} variant="destructive" className="w-full">
@@ -692,7 +722,7 @@ const Game = () => {
               </CardContent>
             </Card>
 
-            {/* ✅ CHAT PANEL - ONLY FOR HUMAN VS HUMAN */}
+            {/* Chat Panel */}
             {socketConnected && !game.isBot && (
               <ChatPanel 
                 gameId={gameId} 
@@ -701,6 +731,8 @@ const Game = () => {
             )}
           </div>
         </div>
+
+        {/* ✅ GAME OVER MODAL - HANDLES ALL ENDINGS */}
         <GameOverModal 
           show={gameOverModal.show}
           winner={gameOverModal.winner}

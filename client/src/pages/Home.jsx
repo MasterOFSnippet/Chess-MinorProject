@@ -122,6 +122,15 @@ const CollapsibleGamesSection = ({ games, getGameStatus, navigate, user }) => {
   );
 };
 
+const isPlayerBusy = (opponent, games) => {
+  return games.some(game => 
+    game.status === 'active' && (
+      game.players.white?._id === opponent._id ||
+      game.players.black?._id === opponent._id
+    )
+  );
+};
+
 const Home = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -564,43 +573,69 @@ const Home = () => {
                         </p>
                       </div>
                     ) : (
-                      filteredUsers.map((opponent) => (
-                        <div
-                          key={opponent._id}
-                          onClick={() => !creatingGame && setSelectedOpponent(opponent._id)}
-                          className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                            selectedOpponent === opponent._id
-                              ? 'border-[hsl(var(--color-primary))] bg-[hsl(var(--color-primary)/0.1)] scale-[1.02] shadow-md'
-                              : 'border-[hsl(var(--color-border))] hover:border-[hsl(var(--color-primary)/0.5)] hover:shadow-sm'
-                          } ${creatingGame ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex-1">
-                              <div className="font-semibold text-lg flex items-center gap-2">
-                                {opponent.username}
-                                {opponent.gamesPlayed > 50 && (
-                                  <Badge variant="secondary" className="text-xs">
-                                    🏆 Veteran
-                                  </Badge>
-                                )}
-                                {opponent.gamesPlayed === 0 && (
-                                  <Badge variant="outline" className="text-xs">
-                                    🆕 New
-                                  </Badge>
+                      filteredUsers.map((opponent) => {
+                        const isBusy = isPlayerBusy(opponent, games);
+                        
+                        return (
+                          <div
+                            key={opponent._id}
+                            onClick={() => !creatingGame && !isBusy && setSelectedOpponent(opponent._id)}
+                            className={`p-4 rounded-lg border-2 transition-all ${
+                              isBusy
+                                ? 'border-orange-500/50 bg-orange-500/5 cursor-not-allowed opacity-60'
+                                : selectedOpponent === opponent._id
+                                ? 'border-[hsl(var(--color-primary))] bg-[hsl(var(--color-primary)/0.1)] scale-[1.02] shadow-md cursor-pointer'
+                                : 'border-[hsl(var(--color-border))] hover:border-[hsl(var(--color-primary)/0.5)] hover:shadow-sm cursor-pointer'
+                            } ${creatingGame && !isBusy ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <div className="font-semibold text-lg flex items-center gap-2 flex-wrap">
+                                  {opponent.username}
+                                  
+                                  {/* Busy indicator */}
+                                  {isBusy && (
+                                    <Badge variant="outline" className="text-xs border-orange-500 text-orange-500">
+                                      🎮 In Game
+                                    </Badge>
+                                  )}
+                                  
+                                  {/* Veteran badge */}
+                                  {!isBusy && opponent.gamesPlayed > 50 && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      🏆 Veteran
+                                    </Badge>
+                                  )}
+                                  
+                                  {/* New player badge */}
+                                  {!isBusy && opponent.gamesPlayed === 0 && (
+                                    <Badge variant="outline" className="text-xs">
+                                      🆕 New
+                                    </Badge>
+                                  )}
+                                </div>
+                                
+                                <div className="text-sm text-[hsl(var(--color-muted-foreground))] mt-1">
+                                  ⭐ Rating: <strong>{opponent.rating}</strong> • {opponent.gamesPlayed} games
+                                </div>
+                                
+                                {/* Busy message */}
+                                {isBusy && (
+                                  <div className="text-xs text-orange-500 mt-1 italic">
+                                    Currently playing a game
+                                  </div>
                                 )}
                               </div>
-                              <div className="text-sm text-[hsl(var(--color-muted-foreground))] mt-1">
-                                ⭐ Rating: <strong>{opponent.rating}</strong> • {opponent.gamesPlayed} games
-                              </div>
+                              
+                              {selectedOpponent === opponent._id && !isBusy && (
+                                <div className="text-2xl text-[hsl(var(--color-primary))]">
+                                  ✓
+                                </div>
+                              )}
                             </div>
-                            {selectedOpponent === opponent._id && (
-                              <div className="text-2xl text-[hsl(var(--color-primary))]">
-                                ✓
-                              </div>
-                            )}
                           </div>
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
 
