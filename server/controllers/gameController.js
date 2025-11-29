@@ -78,6 +78,21 @@ exports.createGame = async (req, res) => {
 
     console.log(`✅ Game created: ${game._id} | ${game.players.white.username} vs ${game.players.black.username}`);
 
+    // ============================================
+    // NOTIFY OPPONENT VIA SOCKET.IO
+    // ============================================
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('game:new-challenge', {
+        opponentId: opponentId,
+        gameId: game._id,
+        challenger: req.user.username,
+        message: `${req.user.username} has challenged you to a game!`
+      });
+      
+      console.log(`📢 Challenge notification sent to ${opponent.username}`);
+    }
+
     res.status(201).json({
       success: true,
       game,

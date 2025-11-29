@@ -1,3 +1,5 @@
+// client/src/pages/Game.jsx - FIXED VERSION
+
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Chess } from 'chess.js';
@@ -17,7 +19,6 @@ import { Trophy, Clock, Target, Flag, Bot, User, AlertCircle, AlertTriangle, XCi
 const GameOverModal = ({ show, winner, reason, onClose }) => {
   if (!show) return null;
 
-  // Determine modal styling based on outcome
   const getModalStyle = () => {
     if (winner === 'You') {
       return {
@@ -101,15 +102,19 @@ const Game = () => {
   // 🎯 UNIFIED GAME OVER HANDLER
   // ============================================
   const showGameOverModal = (winner, reason) => {
-    console.log('🏁 Game Over:', winner, reason);
-    setGameOverModal({
-      show: true,
-      winner,
-      reason
-    });
+    console.log('🏁 Showing Game Over Modal:', { winner, reason });
+    
+    // Force modal to show with a small delay to ensure state updates
+    setTimeout(() => {
+      setGameOverModal({
+        show: true,
+        winner,
+        reason
+      });
+    }, 100);
   };
 
-  // Socket initialization (same as before)
+  // Socket initialization
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -152,7 +157,6 @@ const Game = () => {
     if (gameId) {
       fetchGame();
       
-      // Join socket room for real-time updates
       if (socketConnected) {
         try {
           socketService.joinGame(gameId);
@@ -201,7 +205,6 @@ const Game = () => {
         setPosition(gameData.fen);
       });
 
-      // ✅ TIMEOUT HANDLER - USE MODAL
       socketService.getSocket().on('game:timeout', (data) => {
         console.log('⏰ Game timed out:', data);
         
@@ -285,6 +288,13 @@ const Game = () => {
       chess.load(gameData.fen);
       setPosition(gameData.fen);
       setLoading(false);
+
+      // ✅ CHECK IF GAME IS ALREADY OVER WHEN LOADING
+      if (gameData.status === 'completed') {
+        setTimeout(() => {
+          determineWinnerAndShowModal(gameData);
+        }, 500);
+      }
     } catch (error) {
       console.error('❌ Error fetching game:', error);
       setError(error.response?.data?.message || 'Failed to load game');
@@ -294,6 +304,39 @@ const Game = () => {
         setTimeout(() => navigate('/'), 2000);
       }
     }
+  };
+
+  // ✅ NEW: Helper to determine winner from completed game
+  const determineWinnerAndShowModal = (gameData) => {
+    let winner = 'Unknown';
+    let reason = 'Game ended';
+
+    if (gameData.result === '1/2-1/2') {
+      winner = 'Draw';
+      reason = 'Game ended in a draw';
+    } else if (gameData.winner) {
+      const winnerId = gameData.winner._id || gameData.winner;
+      
+      if (winnerId.toString() === user.id) {
+        winner = 'You';
+      } else if (gameData.isBot) {
+        winner = 'Stockfish';
+      } else {
+        if (gameData.players.white?._id?.toString() === winnerId.toString()) {
+          winner = gameData.players.white.username;
+        } else if (gameData.players.black?._id?.toString() === winnerId.toString()) {
+          winner = gameData.players.black.username;
+        }
+      }
+
+      if (gameData.abandonedBy) {
+        reason = `${gameData.abandonedBy.toUpperCase()} ran out of time!`;
+      } else {
+        reason = 'Checkmate! Game over.';
+      }
+    }
+
+    showGameOverModal(winner, reason);
   };
 
   const isMyTurn = () => {
@@ -327,7 +370,7 @@ const Game = () => {
     
     if (!testMove) {
       console.error('❌ Invalid move locally:', move);
-      return; // Silent fail for better UX
+      return;
     }
 
     try {
@@ -351,62 +394,47 @@ const Game = () => {
       chess.load(newGame.fen);
       setPosition(newGame.fen);
 
-      // ✅ CHECK ALERT - Only for non-checkmate checks
-      if (response.data.gameStatus.isCheck && !response.data.gameStatus.isCheckmate) {
-        setTimeout(() => {
-          const playerInCheck = newGame.currentTurn;
-          const myColor = getPlayerColor();
-          
-          if (playerInCheck === myColor) {
-            // Optional: Could use a toast notification instead
-            const audio = new Audio('/check-sound.mp3'); // Add sound effect
-            audio.play().catch(() => {}); // Silent fail if no sound
-          }
-        }, 300);
-      }
-
-      // ✅ CHECKMATE - USE MODAL INSTEAD OF ALERT
+      // ✅ CHECKMATE - USE MODAL
       if (response.data.gameStatus.isCheckmate) {
-        setTimeout(() => {
-          let winnerName = 'Unknown';
+        console.log('🎯 Checkmate detected, showing modal...');
+        
+        let winnerName = 'Unknown';
+        
+        if (game.isBot) {
+          const myColor = getPlayerColor();
+          const winnerColor = newGame.currentTurn === 'white' ? 'black' : 'white';
+          winnerName = myColor === winnerColor ? 'You' : 'Stockfish';
+        } else {
+          const winnerId = newGame.winner?._id || newGame.winner;
           
-          if (game.isBot) {
-            const myColor = getPlayerColor();
-            const winnerColor = newGame.currentTurn === 'white' ? 'black' : 'white';
-            winnerName = myColor === winnerColor ? 'You' : 'Stockfish';
-          } else {
-            const winnerId = newGame.winner?._id || newGame.winner;
-            
-            if (winnerId) {
-              if (winnerId.toString() === user.id) {
-                winnerName = 'You';
-              } else {
-                if (newGame.players.white?._id?.toString() === winnerId.toString()) {
-                  winnerName = newGame.players.white.username;
-                } else if (newGame.players.black?._id?.toString() === winnerId.toString()) {
-                  winnerName = newGame.players.black.username;
-                }
+          if (winnerId) {
+            if (winnerId.toString() === user.id) {
+              winnerName = 'You';
+            } else {
+              if (newGame.players.white?._id?.toString() === winnerId.toString()) {
+                winnerName = newGame.players.white.username;
+              } else if (newGame.players.black?._id?.toString() === winnerId.toString()) {
+                winnerName = newGame.players.black.username;
               }
             }
           }
-          
-          // ✅ SHOW MODAL INSTEAD OF ALERT
-          showGameOverModal(winnerName, 'Checkmate! Game over.');
-        }, 500);
+        }
+        
+        // ✅ IMMEDIATE MODAL DISPLAY
+        showGameOverModal(winnerName, 'Checkmate! Game over.');
       } 
       // ✅ DRAW - USE MODAL
       else if (response.data.gameStatus.isDraw) {
-        setTimeout(() => {
-          let drawReason = 'Stalemate';
-          if (chess.isInsufficientMaterial()) drawReason = 'Insufficient material';
-          if (chess.isThreefoldRepetition()) drawReason = 'Threefold repetition';
-          
-          showGameOverModal('Draw', drawReason);
-        }, 500);
+        console.log('🤝 Draw detected, showing modal...');
+        
+        let drawReason = 'Stalemate';
+        if (chess.isInsufficientMaterial()) drawReason = 'Insufficient material';
+        if (chess.isThreefoldRepetition()) drawReason = 'Threefold repetition';
+        
+        showGameOverModal('Draw', drawReason);
       }
     } catch (error) {
       console.error('❌ Error making move:', error);
-      // Show error as toast/snackbar instead of alert
       setError(error.response?.data?.message || 'Invalid move');
       setTimeout(() => setError(null), 3000);
       fetchGame();
@@ -416,13 +444,19 @@ const Game = () => {
   };
 
   // ============================================
-  // 🎯 RESIGN - USE MODAL INSTEAD OF ALERT
+  // 🎯 RESIGN - FIXED VERSION
   // ============================================
   const handleResign = async () => {
     if (!window.confirm('Are you sure you want to resign?')) return;
     
     try {
-      await gameAPI.resignGame(gameId);
+      console.log('📤 Sending resign request...');
+      const response = await gameAPI.resignGame(gameId);
+      console.log('✅ Resign response:', response.data);
+      
+      // Update local game state first
+      const updatedGame = response.data.game;
+      setGame(updatedGame);
       
       // Determine opponent's name
       let opponentName;
@@ -435,8 +469,10 @@ const Game = () => {
           : game.players.white?.username;
       }
       
-      // ✅ SHOW MODAL INSTEAD OF ALERT + NAVIGATE
+      // ✅ SHOW MODAL - Removed setTimeout, let showGameOverModal handle timing
+      console.log('🏳️ Showing resignation modal...');
       showGameOverModal(opponentName, 'You resigned from the game.');
+      
     } catch (error) {
       console.error('❌ Error resigning:', error);
       setError('Failed to resign. Please try again.');
@@ -444,14 +480,24 @@ const Game = () => {
   };
 
   // ============================================
-  // 🎯 ABORT - USE MODAL
+  // 🎯 ABORT - FIXED VERSION
   // ============================================
   const handleAbort = async () => {
     if (!window.confirm('Abort this game? (No rating change)')) return;
     
     try {
-      await gameAPI.abortGame(gameId);
+      console.log('📤 Sending abort request...');
+      const response = await gameAPI.abortGame(gameId);
+      console.log('✅ Abort response:', response.data);
+      
+      // Update local game state
+      const updatedGame = response.data.game;
+      setGame(updatedGame);
+      
+      // ✅ SHOW MODAL
+      console.log('❌ Showing abort modal...');
       showGameOverModal('Draw', 'Game aborted (no rating change).');
+      
     } catch (error) {
       console.error('❌ Error aborting:', error);
       setError(error.response?.data?.message || 'Cannot abort game');
@@ -732,7 +778,7 @@ const Game = () => {
           </div>
         </div>
 
-        {/* ✅ GAME OVER MODAL - HANDLES ALL ENDINGS */}
+        {/* ✅ GAME OVER MODAL */}
         <GameOverModal 
           show={gameOverModal.show}
           winner={gameOverModal.winner}

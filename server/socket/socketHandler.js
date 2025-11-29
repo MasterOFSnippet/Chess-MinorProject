@@ -67,6 +67,33 @@ const socketHandler = (io) => {
     io.emit('users:count', activeUsers.size);
 
     // ============================================
+    // ✅ NEW: GAME INVITE NOTIFICATION
+    // ============================================
+    
+    /**
+     * Notify a user they've been challenged
+     * Called from gameController.js after game creation
+     */
+    socket.on('game:notify-challenge', ({ opponentId, gameId, challenger }) => {
+      console.log(`🎮 Notifying ${opponentId} about challenge from ${challenger}`);
+      
+      // Find opponent's socket
+      const opponent = activeUsers.get(opponentId);
+      
+      if (opponent) {
+        io.to(opponent.socketId).emit('game:challenge-received', {
+          gameId,
+          challenger,
+          message: `${challenger} has challenged you to a game!`
+        });
+        
+        console.log(`✅ Challenge notification sent to ${opponentId}`);
+      } else {
+        console.log(`⚠️ Opponent ${opponentId} not connected`);
+      }
+    });
+
+    // ============================================
     // GAME EVENTS
     // ============================================
 

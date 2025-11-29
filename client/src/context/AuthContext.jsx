@@ -8,6 +8,23 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Refresh user data function
+  const refreshUser = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (token) {
+        const response = await authAPI.getMe();
+        setUser(response.data.user);
+        localStorage.setItem('user', JSON.stringify(response.data.user));
+        console.log('✅ User data refreshed:', response.data.user);
+        return { success: true, user: response.data.user };
+      }
+    } catch (err) {
+      console.error('Failed to refresh user:', err);
+      return { success: false, error: err.message };
+    }
+  };
+
   // Check if user is logged in on mount
   useEffect(() => {
     const checkAuth = async () => {
@@ -83,6 +100,7 @@ export const AuthProvider = ({ children }) => {
     register,
     login,
     logout,
+    refreshUser, 
     isAuthenticated: !!user,
   };
 

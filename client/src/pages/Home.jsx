@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import socketService from '../services/socketService';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { gameAPI, userAPI } from '../services/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -18,8 +19,48 @@ import {
   Loader2,
   ChevronUp,
   ChevronDown,
-  AlertCircle 
+  AlertCircle,
+  Bell 
 } from 'lucide-react';
+
+// ✅ SIMPLE TOAST NOTIFICATION COMPONENT
+const GameInviteToast = ({ show, challenger, gameId, onAccept, onDismiss }) => {
+  if (!show) return null;
+
+  return (
+    <div className="fixed top-20 right-4 z-50 animate-in slide-in-from-right duration-300">
+      <div className="bg-gradient-to-r from-blue-500/20 to-purple-500/20 border-2 border-blue-500 rounded-lg p-4 shadow-xl backdrop-blur-md max-w-sm">
+        <div className="flex items-start gap-3">
+          <div className="p-2 rounded-full bg-blue-500/20">
+            <Bell className="h-5 w-5 text-blue-500 animate-pulse" />
+          </div>
+          <div className="flex-1">
+            <p className="font-bold text-lg text-[hsl(var(--color-foreground))]">
+              New Game Challenge!
+            </p>
+            <p className="text-sm text-[hsl(var(--color-muted-foreground))] mt-1">
+              <strong>{challenger}</strong> has challenged you to a game!
+            </p>
+            <div className="flex gap-2 mt-3">
+              <button
+                onClick={onAccept}
+                className="flex-1 px-3 py-1.5 rounded-md bg-blue-500 hover:bg-blue-600 text-white font-medium text-sm transition"
+              >
+                View Game
+              </button>
+              <button
+                onClick={onDismiss}
+                className="px-3 py-1.5 rounded-md border border-[hsl(var(--color-border))] hover:bg-[hsl(var(--color-muted))] text-sm transition"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const CollapsibleGamesSection = ({ games, getGameStatus, navigate, user }) => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -132,8 +173,9 @@ const isPlayerBusy = (opponent, games) => {
 };
 
 const Home = () => {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation(); 
   
   // ============================================
   // STATE MANAGEMENT
@@ -147,14 +189,102 @@ const Home = () => {
   const [gameMode, setGameMode] = useState('human');
   const [searchQuery, setSearchQuery] = useState('');
   const [creatingGame, setCreatingGame] = useState(false);
+  const [gameInvite, setGameInvite] = useState({
+    show: false,
+    challenger: '',
+    gameId: ''
+  });
+
+  // ============================================
+  //  REFRESH DATA ON MOUNT AND AFTER NAVIGATION
+  // ============================================
+  useEffect(() => {
+    console.log('🔄 Home component mounted/navigated, refreshing data...');
+    fetchData();
+    // Refresh user data to get updated rating
+    refreshUser();
+  }, [location.pathname]); // Re-run when URL changes
+
+  // ============================================
+  //  REFRESH WHEN TAB BECOMES VISIBLE
+  // ============================================
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('👀 Tab became visible, refreshing...');
+        fetchData();
+        refreshUser();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  // ============================================
+  //  LISTEN FOR GAME INVITES
+  // ============================================
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    
+    if (token && !socketService.isConnected()) {
+      socketService.connect(token);
+    }
+
+    const socket = socketService.getSocket();
+    
+    if (socket) {
+      // Listen for game challenges
+      socket.on('game:new-challenge', (data) => {
+        console.log('🎮 Game challenge received:', data);
+        
+        // Only show if it's for this user
+        if (data.opponentId === user.id) {
+          setGameInvite({
+            show: true,
+            challenger: data.challenger,
+            gameId: data.gameId
+          });
+
+          // Browser notification (if permitted)
+          if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('Chess Challenge!', {
+              body: `${data.challenger} has challenged you to a game!`,
+              icon: '/chess-pawn.svg'
+            });
+          }
+
+          // Auto-dismiss after 15 seconds
+          setTimeout(() => {
+            setGameInvite(prev => ({ ...prev, show: false }));
+          }, 15000);
+        }
+      });
+
+      return () => {
+        socket.off('game:new-challenge');
+      };
+    }
+  }, [user]);
+
+  // ============================================
+  //  HANDLE INVITE ACTIONS
+  // ============================================
+  const handleAcceptInvite = () => {
+    navigate(`/game/${gameInvite.gameId}`);
+    setGameInvite({ show: false, challenger: '', gameId: '' });
+  };
+
+  const handleDismissInvite = () => {
+    setGameInvite({ show: false, challenger: '', gameId: '' });
+  };
 
   // ============================================
   // DATA FETCHING
   // ============================================
-  useEffect(() => {
-    fetchData();
-  }, []);
-
   const fetchData = async () => {
     try {
       setError(null);
@@ -164,6 +294,7 @@ const Home = () => {
       ]);
       setGames(gamesRes.data.games);
       setUsers(usersRes.data.users);
+      console.log('✅ Data refreshed successfully');
     } catch (error) {
       console.error('❌ Error fetching data:', error);
       setError(error.response?.data?.message || 'Failed to load data. Please refresh.');
@@ -331,6 +462,14 @@ const Home = () => {
   // ============================================
   return (
     <div className="min-h-screen py-8 px-4 text-[hsl(var(--color-foreground))] bg-[hsl(var(--color-background))]">
+      {/* ✅ RENDER TOAST NOTIFICATION */}
+      <GameInviteToast
+        show={gameInvite.show}
+        challenger={gameInvite.challenger}
+        gameId={gameInvite.gameId}
+        onAccept={handleAcceptInvite}
+        onDismiss={handleDismissInvite}
+      />
       <div className="max-w-7xl mx-auto space-y-8">
         
         {/* ============================================
